@@ -41,7 +41,7 @@
                 </button>
             </div>
 
-            <a href="{{ route('dashboard') }}" class="hidden sm:flex items-center gap-3 xl:hidden">
+            <a href="{{ route('dashboard') }}" class="flex items-center gap-3 xl:hidden">
                 <span
                     class="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-900 text-xs font-semibold tracking-[0.28em] text-white dark:bg-white dark:text-gray-900">
                     WE
@@ -92,8 +92,8 @@
                 @endif
 
                 <button
-                    class="header-action relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-                    @click="$store.theme.toggle()" aria-label="Toggle theme">
+                    class="relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                    @click="$store.theme.toggle()">
                     <svg class="hidden dark:block" width="20" height="20" viewBox="0 0 20 20" fill="none"
                         aria-hidden="true">
                         <path fill-rule="evenodd" clip-rule="evenodd"

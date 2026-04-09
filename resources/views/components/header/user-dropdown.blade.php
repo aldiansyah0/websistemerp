@@ -19,18 +19,18 @@
         this.dropdownOpen = false;
     }
 }" @click.away="closeDropdown()">
-    <button class="header-action flex items-center text-gray-700 dark:text-gray-400" @click.prevent="toggleDropdown()" type="button" aria-label="Open user menu" x-bind:aria-expanded="dropdownOpen" title="Account">
+    <button class="flex items-center text-gray-700 dark:text-gray-400" @click.prevent="toggleDropdown()" type="button">
         <span
-            class="mr-3 header-avatar flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-sm font-semibold text-white dark:bg-white dark:text-gray-900">
+            class="mr-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-sm font-semibold text-white dark:bg-white dark:text-gray-900">
             {{ $initials !== '' ? $initials : 'WS' }}
         </span>
 
-        <span class="sr-only header-username">{{ $authUser?->name ?? 'ERP User' }}</span>
+        {{-- <span class="mr-1 block font-medium text-theme-sm">{{ $authUser?->name ?? 'ERP User' }}</span> --}}
 
-        <svg class="h-5 w-5 transition-transform duration-200" :class="{ 'rotate-180': dropdownOpen }" fill="none"
+        {{-- <svg class="h-5 w-5 transition-transform duration-200" :class="{ 'rotate-180': dropdownOpen }" fill="none"
             stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-        </svg>
+        </svg> --}}
     </button>
 
     <div x-show="dropdownOpen" x-transition:enter="transition ease-out duration-100"
