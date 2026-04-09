@@ -5,10 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules;
 use Illuminate\View\View;
 
 class AuthController extends Controller
@@ -107,5 +112,86 @@ class AuthController extends Controller
         return redirect()
             ->route('login')
             ->with('success', 'Anda berhasil logout.');
+    }
+
+    public function showForgotPassword(): View
+    {
+        return view('pages.auth.forgot-password');
+    }
+
+    public function sendResetLink(Request $request): RedirectResponse
+    {
+        $request->validate(
+            ['email' => ['required', 'email']],
+            ['email.required' => 'Email wajib diisi.', 'email.email' => 'Format email tidak valid.']
+        );
+
+        // Selalu tampilkan pesan sukses (tidak bocorkan apakah email terdaftar)
+        Password::sendResetLink($request->only('email'));
+
+        return back()->with('status', 'Jika email tersebut terdaftar, link reset password telah dikirim. Cek inbox Anda.');
+    }
+
+    public function showResetPassword(Request $request): View
+    {
+        return view('pages.auth.reset-password', [
+            'token' => $request->route('token'),
+            'email' => $request->query('email'),
+        ]);
+    }
+
+    public function resetPassword(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'token'    => ['required'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'confirmed', Rules\Password::min(8)],
+        ], [
+            'email.required'     => 'Email wajib diisi.',
+            'password.required'  => 'Password baru wajib diisi.',
+            'password.min'       => 'Password minimal 8 karakter.',
+            'password.confirmed' => 'Konfirmasi password tidak cocok.',
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user) use ($request): void {
+                $user->forceFill([
+                    'password'       => Hash::make($request->string('password')),
+                    'remember_token' => Str::random(60),
+                ])->save();
+
+                event(new PasswordReset($user));
+            }
+        );
+
+        return $status === Password::PASSWORD_RESET
+            ? redirect()->route('login')->with('success', 'Password berhasil direset. Silakan login.')
+            : back()->withErrors(['email' => 'Link reset tidak valid atau sudah kadaluarsa. Minta link baru.']);
+    }
+
+    public function showChangePassword(): View
+    {
+        return view('pages.auth.change-password');
+    }
+
+    public function changePassword(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password'         => ['required', 'confirmed', Rules\Password::min(8)],
+        ], [
+            'current_password.required'      => 'Password saat ini wajib diisi.',
+            'current_password.current_password' => 'Password saat ini tidak sesuai.',
+            'password.required'              => 'Password baru wajib diisi.',
+            'password.min'                   => 'Password baru minimal 8 karakter.',
+            'password.confirmed'             => 'Konfirmasi password tidak cocok.',
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+        $user->update(['password' => Hash::make($request->string('password'))]);
+
+        return redirect()->route('dashboard')->with('success', 'Password berhasil diubah.');
     }
 }

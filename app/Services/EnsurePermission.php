@@ -17,11 +17,8 @@ class EnsurePermission
         $user = $request->user();
 
         if ($user === null) {
-            if (app()->environment(['local', 'testing'])) {
-                return $next($request);
-            }
-
-            abort(403, 'Akses ditolak. Silakan login terlebih dahulu.');
+            return redirect()->route('login')
+                ->with('error', 'Sesi Anda telah berakhir. Silakan login kembali.');
         }
 
         if ($user->hasRole([Role::OWNER, Role::SUPER_ADMIN])) {

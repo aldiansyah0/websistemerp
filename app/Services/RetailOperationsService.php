@@ -1155,6 +1155,7 @@ class RetailOperationsService
         $receipts = GoodsReceipt::query()
             ->with(['purchaseOrder.supplier', 'warehouse', 'receiver', 'items.product'])
             ->orderByDesc('received_at')
+            ->take(50)
             ->get();
 
         return array_merge($page, [
@@ -2152,11 +2153,11 @@ class RetailOperationsService
     {
         $page = $this->basePage('sales-return');
         $returns = SalesReturn::query()
-            ->with(['salesTransaction.outlet', 'approver'])
+            ->with(['salesTransaction.outlet', 'approver', 'items.product'])
             ->withCount('items')
             ->orderByDesc('return_date')
             ->orderByDesc('id')
-            ->take(30)
+            ->take(50)
             ->get();
         $candidates = SalesTransaction::query()
             ->with('outlet')

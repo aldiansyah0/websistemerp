@@ -1,62 +1,108 @@
-name: ERP CI
+name: ERP CI/CD
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - develop
+    branches: [main, master, develop]
   pull_request:
-    branches:
-      - '*'
+    branches: ['*']
 
 jobs:
-  php-tests:
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: webstellar_test
+          MYSQL_USER: webstellar
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: secret
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -psecret"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
-      - name: Setup PHP
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
           coverage: none
-          extensions: mbstring, pdo_sqlite, sqlite3, bcmath, intl
+          extensions: mbstring, pdo_mysql, redis, bcmath, intl, gd
 
-      - name: Validate composer
-        run: composer validate --strict
-
-      - name: Install PHP dependencies
-        run: composer install --no-interaction --prefer-dist --optimize-autoloader
-
-      - name: Prepare Laravel environment
-        run: |
-          cp .env.example .env
-          php artisan key:generate
-
-      - name: Run test suite
-        run: php artisan test --without-tty
-
-  assets-build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
 
-      - name: Install Node dependencies
-        run: npm ci
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
-      - name: Build frontend assets
-        run: npm run build
+      - name: Install NPM & build assets
+        run: npm ci && npm run build
 
+      - name: Prepare test environment
+        run: |
+          cp .env.example .env
+          sed -i 's/APP_ENV=production/APP_ENV=testing/' .env
+          sed -i 's/APP_DEBUG=false/APP_DEBUG=true/' .env
+          sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=mysql/' .env
+          sed -i 's/DB_DATABASE=webstellar_erp/DB_DATABASE=webstellar_test/' .env
+          sed -i 's/DB_USERNAME=webstellar_user/DB_USERNAME=webstellar/' .env
+          sed -i 's/DB_PASSWORD=/DB_PASSWORD=secret/' .env
+          sed -i 's/QUEUE_CONNECTION=redis/QUEUE_CONNECTION=sync/' .env
+          sed -i 's/CACHE_STORE=redis/CACHE_STORE=array/' .env
+          sed -i 's/SESSION_ENCRYPT=true/SESSION_ENCRYPT=false/' .env
+          php artisan key:generate
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: Run test suite
+        run: php artisan test --without-tty --parallel
+
+  build-docker:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t webstellar-erp:${{ github.sha }} .
+          docker build -t webstellar-erp:latest .
+
+      - name: Test Docker image starts
+        run: |
+          docker run -d --name test-container \
+            -e APP_KEY=$(php artisan key:generate --show 2>/dev/null || echo "base64:$(openssl rand -base64 32)") \
+            -e APP_ENV=production \
+            -e DB_CONNECTION=sqlite \
+            -e DB_DATABASE=/tmp/test.db \
+            -p 8080:80 \
+            webstellar-erp:${{ github.sha }}
+          sleep 10
+          curl -f http://localhost:8080/up || exit 1
+          docker stop test-container
+
+      # Tambahkan step push ke registry sesuai kebutuhan:
+      # - name: Push to Docker Hub
+      #   run: |
+      #     echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      #     docker push webstellar-erp:${{ github.sha }}
+      #     docker push webstellar-erp:latest

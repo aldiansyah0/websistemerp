@@ -12,6 +12,7 @@ class AccountingJournalLine extends Model
 
     protected $fillable = [
         'journal_entry_id',
+        'gl_account_id',
         'line_no',
         'account_code',
         'account_name',
@@ -31,5 +32,10 @@ class AccountingJournalLine extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(AccountingJournalEntry::class, 'journal_entry_id');
+    }
+
+    public function glAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccounts::class, 'gl_account_id');
     }
 }

@@ -67,4 +67,69 @@ class GoodsReceipt extends Model
         $this->total_quantity = $items->sum(fn (GoodsReceiptItem $item): float => (float) $item->received_quantity);
         $this->total_cost = $items->sum(fn (GoodsReceiptItem $item): float => (float) $item->line_total);
     }
+
+    /**
+     * Check if receiving exceeds PO quantity for an item
+     * Allows 5% tolerance for rounding
+     */
+    public function validateItemOverage(int $poItemId, float $receivedQty): bool
+    {
+        $poItem = $this->purchaseOrder
+            ?->items()
+            ->where('id', $poItemId)
+            ->first();
+
+        if (!$poItem) {
+            return false;
+        }
+
+        // Calculate total already received
+        $alreadyReceived = GoodsReceiptItem::whereHas('goodsReceipt', function ($q) {
+            $q->where('purchase_order_id', $this->purchase_order_id)
+                ->where('id', '!=', $this->id ?? 0);
+        })->where('purchase_order_item_id', $poItemId)
+            ->sum('received_quantity');
+
+        $totalToReceive = $alreadyReceived + $receivedQty;
+        $tolerance = $poItem->order_quantity * 0.05; // 5% tolerance
+
+        return $totalToReceive <= ($poItem->order_quantity + $tolerance);
+    }
+
+    /**
+     * Get overage summary if any
+     */
+    public function getOverageSummary(): array
+    {
+        $po = $this->purchaseOrder;
+        if (!$po) {
+            return [];
+        }
+
+        $overages = [];
+
+        foreach ($this->items as $grItem) {
+            $poItem = $po->items()->where('id', $grItem->purchase_order_item_id)->first();
+            if (!$poItem) continue;
+
+            $alreadyReceived = GoodsReceiptItem::whereHas('goodsReceipt', function ($q) {
+                $q->where('purchase_order_id', $this->purchase_order_id)
+                    ->where('id', '!=', $this->id);
+            })->where('purchase_order_item_id', $poItem->id)
+                ->sum('received_quantity');
+
+            $totalReceived = $alreadyReceived + $grItem->received_quantity;
+
+            if ($totalReceived > $poItem->order_quantity) {
+                $overages[] = [
+                    'product_name' => $grItem->product?->name,
+                    'po_qty' => $poItem->order_quantity,
+                    'received_qty' => $totalReceived,
+                    'overage_qty' => $totalReceived - $poItem->order_quantity,
+                ];
+            }
+        }
+
+        return $overages;
+    }
 }

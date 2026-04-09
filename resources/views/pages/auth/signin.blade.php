@@ -29,6 +29,12 @@
                         </div>
                     @endif
 
+                    @if (session('error'))
+                        <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+                            {{ session('error') }}
+                        </div>
+                    @endif
+
                     @if ($errors->any())
                         <div
                             class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
@@ -69,6 +75,12 @@
                                 {{ old('remember') ? 'checked' : '' }}>
                             Tetap login
                         </label>
+
+                        <div class="flex justify-end">
+                            <a href="{{ route('password.request') }}" class="text-sm text-brand-500 hover:underline dark:text-brand-400">
+                                Lupa password?
+                            </a>
+                        </div>
 
                         <button type="submit"
                             class="bg-brand-500 shadow-theme-xs hover:bg-brand-600 flex w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-medium text-white transition">

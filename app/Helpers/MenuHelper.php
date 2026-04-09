@@ -279,6 +279,20 @@ class MenuHelper
                     ],
                 ],
             ],
+            [
+                'title' => 'Pengaturan',
+                'items' => [
+                    [
+                        'key'         => 'user-management',
+                        'icon'        => 'users-check',
+                        'name'        => 'Kelola User',
+                        'path'        => '/pengaturan/kelola-user',
+                        'route_name'  => 'user-management',
+                        'description' => 'Kelola akun user, assignment role, dan hak akses lokasi per outlet/gudang.',
+                        'permission'  => 'security.user.manage',
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -385,6 +399,7 @@ class MenuHelper
             'procurement' => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.75 5.75H17.25C18.3546 5.75 19.25 6.64543 19.25 7.75V16.25C19.25 17.3546 18.3546 18.25 17.25 18.25H6.75C5.64543 18.25 4.75 17.3546 4.75 16.25V7.75C4.75 6.64543 5.64543 5.75 6.75 5.75Z" stroke="currentColor" stroke-width="1.5"/><path d="M8.25 9.25H15.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8.25 12.25H13.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M15.75 14.75L17.25 16.25L20 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
             'retail-sales' => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.75 6.75H17.25C18.3546 6.75 19.25 7.64543 19.25 8.75V17.25C19.25 18.3546 18.3546 19.25 17.25 19.25H6.75C5.64543 19.25 4.75 18.3546 4.75 17.25V8.75C4.75 7.64543 5.64543 6.75 6.75 6.75Z" stroke="currentColor" stroke-width="1.5"/><path d="M8.25 10.25H15.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8.25 13.25H12.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M14.75 4.75V8.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.25 4.75V8.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
             'hrd-module' => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 8.25C8 6.73122 9.23122 5.5 10.75 5.5H13.25C14.7688 5.5 16 6.73122 16 8.25C16 9.76878 14.7688 11 13.25 11H10.75C9.23122 11 8 9.76878 8 8.25Z" stroke="currentColor" stroke-width="1.5"/><path d="M4.75 18.75C4.75 15.8505 7.10051 13.5 10 13.5H14C16.8995 13.5 19.25 15.8505 19.25 18.75V19.25H4.75V18.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M18.25 6.5H20.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M19.25 5.5V7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+            'users-check' => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 8.25C8 6.73122 9.23122 5.5 10.75 5.5H13.25C14.7688 5.5 16 6.73122 16 8.25C16 9.76878 14.7688 11 13.25 11H10.75C9.23122 11 8 9.76878 8 8.25Z" stroke="currentColor" stroke-width="1.5"/><path d="M4.75 18.75C4.75 15.8505 7.10051 13.5 10 13.5H14C16.8995 13.5 19.25 15.8505 19.25 18.75V19.25H4.75V18.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M17.75 6.75L19.25 8.25L21.75 5.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
             'employee-portal' => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.75 19.25H17.25C18.3546 19.25 19.25 18.3546 19.25 17.25V6.75C19.25 5.64543 18.3546 4.75 17.25 4.75H6.75C5.64543 4.75 4.75 5.64543 4.75 6.75V17.25C4.75 18.3546 5.64543 19.25 6.75 19.25Z" stroke="currentColor" stroke-width="1.5"/><path d="M8.25 9H15.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8.25 12H13.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8.25 15H11.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
             'finance' => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.75 18.25H18.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M7.75 15.75V10.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 15.75V7.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M16.25 15.75V12.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
         ];
@@ -466,6 +481,7 @@ class MenuHelper
             'period-closing' => 'finance.period.close',
             'cash-reconciliation' => 'finance.reconciliation.manage',
             'audit-trail' => 'audit.log.view',
+            'user-management' => 'security.user.manage',
         ];
     }
 }

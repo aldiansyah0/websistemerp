@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\AccountMapping;
 use App\Models\AccountingJournalEntry;
+use App\Models\GoodsReceipt;
 use App\Models\PayrollRun;
+use App\Models\PurchaseOrder;
 use App\Models\PurchaseReturn;
 use App\Models\SalesTransaction;
 use App\Models\SalesReturn;
@@ -38,11 +41,47 @@ class AccountingJournalService
             return $existing->load('lines');
         }
 
+        $tenantId = (int) $transaction->tenant_id;
+
+        // Get GL accounts from mapping
+        $cashAccount = AccountMapping::getAccount($tenantId, 'sales_transaction', 'sales_cash');
+        $revenueAccount = AccountMapping::getAccount($tenantId, 'sales_transaction', 'sales_revenue');
+        $cogsAccount = AccountMapping::getAccount($tenantId, 'sales_transaction', 'sales_cogs');
+        $inventoryAccount = AccountMapping::getAccount($tenantId, 'sales_transaction', 'sales_inventory');
+
+        if (!$cashAccount || !$revenueAccount || !$cogsAccount || !$inventoryAccount) {
+            throw new DomainException('GL account mapping untuk sales_transaction belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
         $lines = [
-            ['account_code' => '1101', 'account_name' => 'Kas & Bank', 'debit' => $cashReceived, 'credit' => 0],
-            ['account_code' => '4101', 'account_name' => 'Pendapatan Penjualan', 'debit' => 0, 'credit' => $salesAmount],
-            ['account_code' => '5101', 'account_name' => 'Harga Pokok Penjualan', 'debit' => $costOfGoodsSold, 'credit' => 0],
-            ['account_code' => '1201', 'account_name' => 'Persediaan Barang Dagang', 'debit' => 0, 'credit' => $costOfGoodsSold],
+            [
+                'gl_account_id' => $cashAccount->id,
+                'account_code' => $cashAccount->account_code,
+                'account_name' => $cashAccount->account_name,
+                'debit' => $cashReceived,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $revenueAccount->id,
+                'account_code' => $revenueAccount->account_code,
+                'account_name' => $revenueAccount->account_name,
+                'debit' => 0,
+                'credit' => $salesAmount,
+            ],
+            [
+                'gl_account_id' => $cogsAccount->id,
+                'account_code' => $cogsAccount->account_code,
+                'account_name' => $cogsAccount->account_name,
+                'debit' => $costOfGoodsSold,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $inventoryAccount->id,
+                'account_code' => $inventoryAccount->account_code,
+                'account_name' => $inventoryAccount->account_name,
+                'debit' => 0,
+                'credit' => $costOfGoodsSold,
+            ],
         ];
 
         return $this->postEntry(
@@ -73,10 +112,32 @@ class AccountingJournalService
             return $existing->load('lines');
         }
 
+        $tenantId = (int) $payrollRun->tenant_id;
         $netPayroll = (float) $payrollRun->total_net;
+
+        // Get GL accounts from mapping
+        $expenseAccount = AccountMapping::getAccount($tenantId, 'payroll', 'payroll_expense');
+        $payableAccount = AccountMapping::getAccount($tenantId, 'payroll', 'payroll_payable');
+
+        if (!$expenseAccount || !$payableAccount) {
+            throw new DomainException('GL account mapping untuk payroll belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
         $lines = [
-            ['account_code' => '5201', 'account_name' => 'Beban Gaji', 'debit' => $netPayroll, 'credit' => 0],
-            ['account_code' => '2102', 'account_name' => 'Utang Gaji', 'debit' => 0, 'credit' => $netPayroll],
+            [
+                'gl_account_id' => $expenseAccount->id,
+                'account_code' => $expenseAccount->account_code,
+                'account_name' => $expenseAccount->account_name,
+                'debit' => $netPayroll,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $payableAccount->id,
+                'account_code' => $payableAccount->account_code,
+                'account_name' => $payableAccount->account_name,
+                'debit' => 0,
+                'credit' => $netPayroll,
+            ],
         ];
 
         return $this->postEntry(
@@ -107,10 +168,32 @@ class AccountingJournalService
             return $existing->load('lines');
         }
 
+        $tenantId = (int) $payrollRun->tenant_id;
         $netPayroll = (float) $payrollRun->total_net;
+
+        // Get GL accounts from mapping
+        $payableAccount = AccountMapping::getAccount($tenantId, 'payroll', 'payroll_payable');
+        $cashAccount = AccountMapping::getAccount($tenantId, 'payroll', 'payroll_cash');
+
+        if (!$payableAccount || !$cashAccount) {
+            throw new DomainException('GL account mapping untuk payroll cash belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
         $lines = [
-            ['account_code' => '2102', 'account_name' => 'Utang Gaji', 'debit' => $netPayroll, 'credit' => 0],
-            ['account_code' => '1101', 'account_name' => 'Kas & Bank', 'debit' => 0, 'credit' => $netPayroll],
+            [
+                'gl_account_id' => $payableAccount->id,
+                'account_code' => $payableAccount->account_code,
+                'account_name' => $payableAccount->account_name,
+                'debit' => $netPayroll,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $cashAccount->id,
+                'account_code' => $cashAccount->account_code,
+                'account_name' => $cashAccount->account_name,
+                'debit' => 0,
+                'credit' => $netPayroll,
+            ],
         ];
 
         return $this->postEntry(
@@ -145,11 +228,47 @@ class AccountingJournalService
             return $existing->load('lines');
         }
 
+        $tenantId = (int) $salesReturn->tenant_id;
+
+        // Get GL accounts from mapping
+        $revenueAccount = AccountMapping::getAccount($tenantId, 'sales_return', 'return_revenue');
+        $cashAccount = AccountMapping::getAccount($tenantId, 'sales_return', 'return_cash');
+        $inventoryAccount = AccountMapping::getAccount($tenantId, 'sales_return', 'return_inventory');
+        $cogsAccount = AccountMapping::getAccount($tenantId, 'sales_return', 'return_cogs');
+
+        if (!$revenueAccount || !$cashAccount || !$inventoryAccount || !$cogsAccount) {
+            throw new DomainException('GL account mapping untuk sales_return belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
         $lines = [
-            ['account_code' => '4101', 'account_name' => 'Pendapatan Penjualan', 'debit' => $refundAmount, 'credit' => 0],
-            ['account_code' => '1101', 'account_name' => 'Kas & Bank', 'debit' => 0, 'credit' => $refundAmount],
-            ['account_code' => '1201', 'account_name' => 'Persediaan Barang Dagang', 'debit' => $costOfGoodsReturned, 'credit' => 0],
-            ['account_code' => '5101', 'account_name' => 'Harga Pokok Penjualan', 'debit' => 0, 'credit' => $costOfGoodsReturned],
+            [
+                'gl_account_id' => $revenueAccount->id,
+                'account_code' => $revenueAccount->account_code,
+                'account_name' => $revenueAccount->account_name,
+                'debit' => $refundAmount,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $cashAccount->id,
+                'account_code' => $cashAccount->account_code,
+                'account_name' => $cashAccount->account_name,
+                'debit' => 0,
+                'credit' => $refundAmount,
+            ],
+            [
+                'gl_account_id' => $inventoryAccount->id,
+                'account_code' => $inventoryAccount->account_code,
+                'account_name' => $inventoryAccount->account_name,
+                'debit' => $costOfGoodsReturned,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $cogsAccount->id,
+                'account_code' => $cogsAccount->account_code,
+                'account_name' => $cogsAccount->account_name,
+                'debit' => 0,
+                'credit' => $costOfGoodsReturned,
+            ],
         ];
 
         return $this->postEntry(
@@ -183,9 +302,31 @@ class AccountingJournalService
             return $existing->load('lines');
         }
 
+        $tenantId = (int) $purchaseReturn->tenant_id;
+
+        // Get GL accounts from mapping
+        $apAccount = AccountMapping::getAccount($tenantId, 'purchase_return', 'pr_supplier');
+        $inventoryAccount = AccountMapping::getAccount($tenantId, 'purchase_return', 'pr_inventory');
+
+        if (!$apAccount || !$inventoryAccount) {
+            throw new DomainException('GL account mapping untuk purchase_return belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
         $lines = [
-            ['account_code' => '2101', 'account_name' => 'Hutang Dagang', 'debit' => $returnAmount, 'credit' => 0],
-            ['account_code' => '1201', 'account_name' => 'Persediaan Barang Dagang', 'debit' => 0, 'credit' => $returnAmount],
+            [
+                'gl_account_id' => $apAccount->id,
+                'account_code' => $apAccount->account_code,
+                'account_name' => $apAccount->account_name,
+                'debit' => $returnAmount,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $inventoryAccount->id,
+                'account_code' => $inventoryAccount->account_code,
+                'account_name' => $inventoryAccount->account_name,
+                'debit' => 0,
+                'credit' => $returnAmount,
+            ],
         ];
 
         return $this->postEntry(
@@ -199,6 +340,122 @@ class AccountingJournalService
             ],
             lines: $lines,
             unbalancedErrorMessage: 'Jurnal retur pembelian tidak balance. Approval retur dibatalkan.',
+        );
+    }
+
+    public function postGoodsReceipt(
+        GoodsReceipt $goodsReceipt,
+        float $receivedAmount,
+        CarbonInterface|string|null $entryDate = null,
+    ): AccountingJournalEntry {
+        $existing = AccountingJournalEntry::query()
+            ->where('reference_type', 'goods_receipt')
+            ->where('reference_id', $goodsReceipt->id)
+            ->first();
+
+        if ($existing !== null) {
+            if ($existing->aggregated_at === null) {
+                $this->financialStatementAggregateService->applyJournalEntry($existing);
+            }
+            return $existing->load('lines');
+        }
+
+        $tenantId = (int) $goodsReceipt->tenant_id;
+
+        // Get GL accounts from mapping
+        $inventoryAccount = AccountMapping::getAccount($tenantId, 'goods_receipt', 'gr_inventory');
+        $apAccount = AccountMapping::getAccount($tenantId, 'goods_receipt', 'gr_supplier');
+
+        if (!$inventoryAccount || !$apAccount) {
+            throw new DomainException('GL account mapping untuk goods_receipt belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
+        $lines = [
+            [
+                'gl_account_id' => $inventoryAccount->id,
+                'account_code' => $inventoryAccount->account_code,
+                'account_name' => $inventoryAccount->account_name,
+                'debit' => $receivedAmount,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $apAccount->id,
+                'account_code' => $apAccount->account_code,
+                'account_name' => $apAccount->account_name,
+                'debit' => 0,
+                'credit' => $receivedAmount,
+            ],
+        ];
+
+        return $this->postEntry(
+            header: [
+                'tenant_id' => $goodsReceipt->tenant_id,
+                'location_id' => $goodsReceipt->location_id,
+                'entry_date' => $entryDate ?? now(),
+                'reference_type' => 'goods_receipt',
+                'reference_id' => $goodsReceipt->id,
+                'description' => 'GR ' . $goodsReceipt->receipt_number,
+            ],
+            lines: $lines,
+            unbalancedErrorMessage: 'Jurnal penerimaan barang tidak balance. Posting GR dibatalkan.',
+        );
+    }
+
+    public function postPurchaseOrder(
+        PurchaseOrder $purchaseOrder,
+        float $orderedAmount,
+        CarbonInterface|string|null $entryDate = null,
+    ): AccountingJournalEntry {
+        $existing = AccountingJournalEntry::query()
+            ->where('reference_type', 'purchase_order')
+            ->where('reference_id', $purchaseOrder->id)
+            ->first();
+
+        if ($existing !== null) {
+            if ($existing->aggregated_at === null) {
+                $this->financialStatementAggregateService->applyJournalEntry($existing);
+            }
+            return $existing->load('lines');
+        }
+
+        $tenantId = (int) $purchaseOrder->tenant_id;
+
+        // Get GL accounts from mapping
+        $inventoryAccount = AccountMapping::getAccount($tenantId, 'purchase_order', 'po_inventory');
+        $apAccount = AccountMapping::getAccount($tenantId, 'purchase_order', 'po_supplier');
+
+        if (!$inventoryAccount || !$apAccount) {
+            throw new DomainException('GL account mapping untuk purchase_order belum dikonfigurasi. Hubungi finance untuk setup account mapping.');
+        }
+
+        $lines = [
+            [
+                'gl_account_id' => $inventoryAccount->id,
+                'account_code' => $inventoryAccount->account_code,
+                'account_name' => $inventoryAccount->account_name,
+                'debit' => $orderedAmount,
+                'credit' => 0,
+            ],
+            [
+                'gl_account_id' => $apAccount->id,
+                'account_code' => $apAccount->account_code,
+                'account_name' => $apAccount->account_name,
+                'debit' => 0,
+                'credit' => $orderedAmount,
+            ],
+        ];
+
+        return $this->postEntry(
+            header: [
+                'tenant_id' => $purchaseOrder->tenant_id,
+                'location_id' => $purchaseOrder->location_id,
+                'entry_date' => $entryDate ?? now(),
+                'reference_type' => 'purchase_order',
+                'reference_id' => $purchaseOrder->id,
+                'description' => 'PO ' . $purchaseOrder->po_number,
+            ],
+            lines: $lines,
+            unbalancedErrorMessage: 'Jurnal purchase order tidak balance. Posting PO dibatalkan.',
         );
     }
 

@@ -22,13 +22,18 @@ use App\Http\Controllers\ShiftAttendanceController;
 use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
+    Route::post('/login', [AuthController::class, 'login'])->name('login.attempt')->middleware('throttle:login');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/register', [AuthController::class, 'register'])->name('register.store');
+    Route::get('/lupa-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
+    Route::post('/lupa-password', [AuthController::class, 'sendResetLink'])->name('password.email')->middleware('throttle:5,1');
+    Route::get('/reset-password/{token}', [AuthController::class, 'showResetPassword'])->name('password.reset');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
     Route::redirect('/signin', '/login');
     Route::redirect('/signup', '/register');
 });
@@ -38,6 +43,25 @@ Route::post('/logout', [AuthController::class, 'logout'])
     ->middleware('auth');
 
 Route::middleware('auth')->group(function (): void {
+    Route::get('/profil/ganti-password', [AuthController::class, 'showChangePassword'])->name('password.change');
+    Route::put('/profil/ganti-password', [AuthController::class, 'changePassword'])->name('password.change.update');
+
+Route::get('/pengaturan/kelola-user', [UserManagementController::class, 'index'])
+    ->name('user-management')
+    ->middleware('permission:security.user.manage');
+Route::get('/pengaturan/kelola-user/tambah', [UserManagementController::class, 'create'])
+    ->name('user-management.create')
+    ->middleware('permission:security.user.manage');
+Route::post('/pengaturan/kelola-user', [UserManagementController::class, 'store'])
+    ->name('user-management.store')
+    ->middleware('permission:security.user.manage');
+Route::get('/pengaturan/kelola-user/{user}/edit', [UserManagementController::class, 'edit'])
+    ->name('user-management.edit')
+    ->middleware('permission:security.user.manage');
+Route::put('/pengaturan/kelola-user/{user}', [UserManagementController::class, 'update'])
+    ->name('user-management.update')
+    ->middleware('permission:security.user.manage');
+
 Route::get('/', [DashboardController::class, 'dashboard'])->name('dashboard');
 Route::post('/session/active-location', [LocationAccessController::class, 'switchActive'])
     ->name('active-location.switch')
@@ -131,7 +155,7 @@ Route::post('/penjualan/retur/{salesReturn}/submit', [SalesReturnController::cla
 Route::post('/penjualan/retur/{salesReturn}/approve', [SalesReturnController::class, 'approve'])->name('sales-returns.approve')->middleware('permission:sales.return.manage');
 Route::post('/penjualan/retur/{salesReturn}/reject', [SalesReturnController::class, 'reject'])->name('sales-returns.reject')->middleware('permission:sales.return.manage');
 
-Route::get('/keuangan/laporan-keuangan/export', [FinancialReportExportController::class, 'export'])->name('financial-report.export')->middleware('permission:finance.report.export');
+Route::get('/keuangan/laporan-keuangan/export', [FinancialReportExportController::class, 'export'])->name('financial-report.export')->middleware(['permission:finance.report.export', 'throttle:exports']);
 Route::post('/keuangan/laporan-keuangan/export/queue', [FinancialReportExportController::class, 'queue'])->name('financial-report.export.queue')->middleware('permission:finance.report.export');
 Route::get('/keuangan/laporan-keuangan/export/status/{reportExport}', [FinancialReportExportController::class, 'status'])->name('financial-report.export.status')->middleware('permission:finance.report.export');
 Route::get('/keuangan/laporan-keuangan/export/download/{reportExport}', [FinancialReportExportController::class, 'download'])->name('financial-report.export.download')->middleware('permission:finance.report.export');
@@ -175,6 +199,7 @@ $workspacePermissionMap = [
     'period-closing' => 'finance.period.close',
     'cash-reconciliation' => 'finance.reconciliation.manage',
     'audit-trail' => 'audit.log.view',
+    'user-management' => 'security.user.manage',
 ];
 
 foreach (MenuHelper::getWorkspacePages() as $page) {
