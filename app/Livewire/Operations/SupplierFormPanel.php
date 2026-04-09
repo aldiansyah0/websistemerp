@@ -3,8 +3,11 @@
 namespace App\Livewire\Operations;
 
 use App\Models\Supplier;
+use App\Models\Tenant;
 use App\Services\AnalyticsCacheService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 
@@ -55,39 +58,85 @@ class SupplierFormPanel extends Component
 
     public function save(AnalyticsCacheService $analyticsCacheService)
     {
-        $validated = $this->validate();
+        try {
+            // Validate data
+            $validated = $this->validate();
 
-        $payload = [
-            'code' => trim((string) $validated['code']),
-            'name' => trim((string) $validated['name']),
-            'contact_person' => filled($validated['contact_person']) ? trim((string) $validated['contact_person']) : null,
-            'email' => filled($validated['email']) ? trim((string) $validated['email']) : null,
-            'phone' => filled($validated['phone']) ? trim((string) $validated['phone']) : null,
-            'city' => filled($validated['city']) ? trim((string) $validated['city']) : null,
-            'address' => filled($validated['address']) ? trim((string) $validated['address']) : null,
-            'lead_time_days' => (int) $validated['lead_time_days'],
-            'payment_term_days' => (int) $validated['payment_term_days'],
-            'fill_rate' => (float) $validated['fill_rate'],
-            'reject_rate' => (float) $validated['reject_rate'],
-            'rating' => (float) $validated['rating'],
-            'notes' => filled($validated['notes']) ? trim((string) $validated['notes']) : null,
-            'is_active' => (bool) $validated['is_active'],
-        ];
+            // Resolve tenant ID
+            $tenantId = $this->resolveTenantId();
 
-        if ($this->supplierId !== null) {
-            $supplier = Supplier::query()->findOrFail($this->supplierId);
-            $supplier->update($payload);
-            $message = 'Supplier ' . $supplier->name . ' berhasil diperbarui.';
-        } else {
-            $supplier = Supplier::query()->create($payload);
-            $this->supplierId = (int) $supplier->id;
-            $message = 'Supplier ' . $supplier->name . ' berhasil ditambahkan.';
+            if ($tenantId === null) {
+                Log::warning('Unable to resolve tenant ID for supplier creation');
+                $this->dispatch('notify', type: 'error', message: 'Error: Tidak bisa menentukan tenant. Hubungi administrator.');
+                return;
+            }
+
+            // Prepare payload
+            $payload = [
+                'tenant_id' => $tenantId,
+                'code' => trim((string) $validated['code']),
+                'name' => trim((string) $validated['name']),
+                'contact_person' => filled($validated['contact_person']) ? trim((string) $validated['contact_person']) : null,
+                'email' => filled($validated['email']) ? trim((string) $validated['email']) : null,
+                'phone' => filled($validated['phone']) ? trim((string) $validated['phone']) : null,
+                'city' => filled($validated['city']) ? trim((string) $validated['city']) : null,
+                'address' => filled($validated['address']) ? trim((string) $validated['address']) : null,
+                'lead_time_days' => (int) $validated['lead_time_days'],
+                'payment_term_days' => (int) $validated['payment_term_days'],
+                'fill_rate' => (float) $validated['fill_rate'],
+                'reject_rate' => (float) $validated['reject_rate'],
+                'rating' => (float) $validated['rating'],
+                'notes' => filled($validated['notes']) ? trim((string) $validated['notes']) : null,
+                'is_active' => (bool) $validated['is_active'],
+            ];
+
+            Log::info('Creating/updating supplier', ['payload' => $payload]);
+
+            // Create or update
+            if ($this->supplierId !== null) {
+                $supplier = Supplier::query()->findOrFail($this->supplierId);
+                $supplier->update($payload);
+                $message = 'Supplier ' . $supplier->name . ' berhasil diperbarui.';
+                Log::info('Supplier updated successfully', ['supplier_id' => $supplier->id]);
+            } else {
+                $supplier = Supplier::query()->create($payload);
+                $this->supplierId = (int) $supplier->id;
+                $message = 'Supplier ' . $supplier->name . ' berhasil ditambahkan.';
+                Log::info('Supplier created successfully', ['supplier_id' => $supplier->id]);
+            }
+
+            // Invalidate cache
+            $analyticsCacheService->invalidate();
+
+            // Send notification & redirect
+            session()->flash('success', $message);
+            return redirect()->route('supplier');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Validation failed - errors are auto-displayed by Livewire
+            Log::warning('Validation failed for supplier', ['errors' => $e->errors()]);
+        } catch (\Throwable $e) {
+            // Log the error
+            Log::error('Supplier save error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $this->addError('general', 'Terjadi error saat menyimpan: ' . $e->getMessage());
+        }
+    }
+
+    private function resolveTenantId(): ?int
+    {
+        $user = Auth::user();
+        if ($user !== null && $user->tenant_id !== null) {
+            return (int) $user->tenant_id;
         }
 
-        $analyticsCacheService->invalidate();
-        session()->flash('success', $message);
-
-        return redirect()->route('supplier');
+        $defaultTenant = Tenant::query()->where('code', 'default')->value('id');
+        return $defaultTenant !== null ? (int) $defaultTenant : null;
     }
 
     protected function rules(): array

@@ -3,8 +3,11 @@
 namespace App\Livewire\Operations;
 
 use App\Models\Category;
+use App\Models\Tenant;
 use App\Services\AnalyticsCacheService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
@@ -38,31 +41,77 @@ class CategoryFormPanel extends Component
 
     public function save(AnalyticsCacheService $analyticsCacheService)
     {
-        $validated = $this->validate();
+        try {
+            // Validate data
+            $validated = $this->validate();
 
-        $payload = [
-            'code' => trim((string) $validated['code']),
-            'name' => trim((string) $validated['name']),
-            'slug' => Str::slug((string) $validated['name']),
-            'description' => filled($validated['description']) ? trim((string) $validated['description']) : null,
-            'sort_order' => (int) $validated['sort_order'],
-            'is_active' => (bool) $validated['is_active'],
-        ];
+            // Resolve tenant ID
+            $tenantId = $this->resolveTenantId();
 
-        if ($this->categoryId !== null) {
-            $category = Category::query()->findOrFail($this->categoryId);
-            $category->update($payload);
-            $message = 'Kategori ' . $category->name . ' berhasil diperbarui.';
-        } else {
-            $category = Category::query()->create($payload);
-            $this->categoryId = (int) $category->id;
-            $message = 'Kategori ' . $category->name . ' berhasil ditambahkan.';
+            if ($tenantId === null) {
+                Log::warning('Unable to resolve tenant ID for category creation');
+                $this->addError('general', 'Error: Tidak bisa menentukan tenant. Hubungi administrator.');
+                return;
+            }
+
+            // Prepare payload
+            $payload = [
+                'tenant_id' => $tenantId,
+                'code' => trim((string) $validated['code']),
+                'name' => trim((string) $validated['name']),
+                'slug' => Str::slug((string) $validated['name']),
+                'description' => filled($validated['description']) ? trim((string) $validated['description']) : null,
+                'sort_order' => (int) $validated['sort_order'],
+                'is_active' => (bool) $validated['is_active'],
+            ];
+
+            Log::info('Creating/updating category', ['payload' => $payload]);
+
+            // Create or update
+            if ($this->categoryId !== null) {
+                $category = Category::query()->findOrFail($this->categoryId);
+                $category->update($payload);
+                $message = 'Kategori ' . $category->name . ' berhasil diperbarui.';
+                Log::info('Category updated successfully', ['category_id' => $category->id]);
+            } else {
+                $category = Category::query()->create($payload);
+                $this->categoryId = (int) $category->id;
+                $message = 'Kategori ' . $category->name . ' berhasil ditambahkan.';
+                Log::info('Category created successfully', ['category_id' => $category->id]);
+            }
+
+            // Invalidate cache
+            $analyticsCacheService->invalidate();
+
+            // Send notification & redirect
+            session()->flash('success', $message);
+            return redirect()->route('kategori');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Validation failed - errors are auto-displayed by Livewire
+            Log::warning('Validation failed for category', ['errors' => $e->errors()]);
+        } catch (\Throwable $e) {
+            // Log the error
+            Log::error('Category save error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $this->addError('general', 'Terjadi error saat menyimpan: ' . $e->getMessage());
+        }
+    }
+
+    private function resolveTenantId(): ?int
+    {
+        $user = Auth::user();
+        if ($user !== null && $user->tenant_id !== null) {
+            return (int) $user->tenant_id;
         }
 
-        $analyticsCacheService->invalidate();
-        session()->flash('success', $message);
-
-        return redirect()->route('kategori');
+        $defaultTenant = Tenant::query()->where('code', 'default')->value('id');
+        return $defaultTenant !== null ? (int) $defaultTenant : null;
     }
 
     protected function rules(): array

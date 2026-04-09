@@ -47,32 +47,27 @@
                 }
             });
 
-            Alpine.store('sidebar', {
-                // Initialize based on screen size
-                isExpanded: window.innerWidth >= 1280, // true for desktop, false for mobile
-                isMobileOpen: false,
-                isHovered: false,
+            Alpine.store('notifications', {
+                toasts: [],
 
-                toggleExpanded() {
-                    this.isExpanded = !this.isExpanded;
-                    // When toggling desktop sidebar, ensure mobile menu is closed
-                    this.isMobileOpen = false;
+                add(notification) {
+                    const id = Date.now();
+                    notification.id = id;
+                    notification.type = notification.type || 'info';
+
+                    this.toasts.push(notification);
+
+                    // Auto-remove after 5 seconds for success, 7 seconds for error
+                    const duration = notification.type === 'error' ? 7000 : 5000;
+                    setTimeout(() => {
+                        this.remove(id);
+                    }, duration);
+
+                    return id;
                 },
 
-                toggleMobileOpen() {
-                    this.isMobileOpen = !this.isMobileOpen;
-                    // Don't modify isExpanded when toggling mobile menu
-                },
-
-                setMobileOpen(val) {
-                    this.isMobileOpen = val;
-                },
-
-                setHovered(val) {
-                    // Only allow hover effects on desktop when sidebar is collapsed
-                    if (window.innerWidth >= 1280 && !this.isExpanded) {
-                        this.isHovered = val;
-                    }
+                remove(id) {
+                    this.toasts = this.toasts.filter(t => t.id !== id);
                 }
             });
         });
@@ -134,6 +129,38 @@
     <x-common.preloader/>
     {{-- preloader end --}}
 
+    <!-- Toast Notifications -->
+    <div class="fixed top-4 right-4 z-50 space-y-2" role="region" aria-live="polite" aria-atomic="true">
+        <template x-for="toast in $store.notifications.toasts" :key="toast.id">
+            <div class="animate-slideIn rounded-lg shadow-lg p-4 min-w-[300px]"
+                :class="{
+                    'bg-success-50 border border-success-200 text-success-700 dark:bg-success-500/10 dark:border-success-500/20 dark:text-success-300': toast.type === 'success',
+                    'bg-error-50 border border-error-200 text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-300': toast.type === 'error',
+                    'bg-info-50 border border-info-200 text-info-700 dark:bg-info-500/10 dark:border-info-500/20 dark:text-info-300': toast.type === 'info',
+                }">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3">
+                        <template x-if="toast.type === 'success'">
+                            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                        </template>
+                        <template x-if="toast.type === 'error'">
+                            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+                        </template>
+                        <template x-if="toast.type === 'info'">
+                            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12zM9 9a1 1 0 100-2 1 1 0 000 2zm-.25 5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm2.25-2.5a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" /></svg>
+                        </template>
+                        <div>
+                            <p class="text-sm font-semibold" x-text="toast.message"></p>
+                        </div>
+                    </div>
+                    <button @click="$store.notifications.remove(toast.id)" class="text-current opacity-60 hover:opacity-100">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
     <div class="min-h-screen xl:flex">
         @include('layouts.backdrop')
         @include('layouts.sidebar')
@@ -185,5 +212,27 @@
 
 @livewireScripts
 @stack('scripts')
+
+<script>
+    // Listen for Livewire notify events
+    document.addEventListener('livewire:navigated', () => {
+        Livewire.on('notify', (message, type = 'info') => {
+            Alpine.store('notifications').add({
+                message: message,
+                type: type
+            });
+        });
+    });
+
+    // Also set up the listener immediately
+    if (window.Livewire) {
+        Livewire.on('notify', (message, type = 'info') => {
+            Alpine.store('notifications').add({
+                message: message,
+                type: type
+            });
+        });
+    }
+</script>
 
 </html>
