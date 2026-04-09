@@ -23,6 +23,7 @@ class PurchaseReturnRequest extends FormRequest
             'items' => ['required', 'array', 'min:1'],
             'items.*.purchase_order_item_id' => ['nullable', 'integer', 'exists:purchase_order_items,id'],
             'items.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
             'items.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
             'items.*.reason' => ['nullable', 'string', 'max:120'],
@@ -35,8 +36,12 @@ class PurchaseReturnRequest extends FormRequest
         $validator->after(function ($validator): void {
             $items = (array) $this->input('items', []);
             foreach ($items as $index => $item) {
-                if (blank($item['purchase_order_item_id'] ?? null) && blank($item['product_id'] ?? null)) {
-                    $validator->errors()->add("items.$index.product_id", 'Setiap item retur harus memiliki product_id atau purchase_order_item_id.');
+                if (
+                    blank($item['purchase_order_item_id'] ?? null)
+                    && blank($item['product_id'] ?? null)
+                    && blank($item['product_variant_id'] ?? null)
+                ) {
+                    $validator->errors()->add("items.$index.product_id", 'Setiap item retur harus memiliki purchase_order_item_id, product_id, atau product_variant_id.');
                 }
             }
         });
@@ -67,4 +72,3 @@ class PurchaseReturnRequest extends FormRequest
         return $validated['intent'] ?? 'submit';
     }
 }
-

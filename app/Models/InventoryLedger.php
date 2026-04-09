@@ -14,12 +14,13 @@ class InventoryLedger extends Model
 
     protected bool $locationScoped = true;
 
-    protected $with = ['product', 'warehouse'];
+    protected $with = ['product', 'productVariant', 'warehouse'];
 
     protected $fillable = [
         'tenant_id',
         'location_id',
         'product_id',
+        'product_variant_id',
         'warehouse_id',
         'movement_type',
         'reference_type',
@@ -34,6 +35,7 @@ class InventoryLedger extends Model
     protected function casts(): array
     {
         return [
+            'product_variant_id' => 'integer',
             'quantity' => 'decimal:2',
             'unit_cost' => 'decimal:2',
             'balance_after' => 'decimal:2',
@@ -44,6 +46,11 @@ class InventoryLedger extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
     }
 
     public function warehouse(): BelongsTo

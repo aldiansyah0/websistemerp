@@ -9,7 +9,7 @@ use Carbon\Carbon;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-class GoodsReceiptWorkflowService
+class GoodsReceiptService
 {
     public function __construct(
         private readonly StockService $stockService,
@@ -61,6 +61,7 @@ class GoodsReceiptWorkflowService
                 $line = $goodsReceipt->items()->create([
                     'purchase_order_item_id' => $purchaseOrderItem->id,
                     'product_id' => $purchaseOrderItem->product_id,
+                    'product_variant_id' => $purchaseOrderItem->product_variant_id,
                     'received_quantity' => $receivedQuantity,
                     'unit_cost' => (float) $purchaseOrderItem->unit_cost,
                     'line_total' => $receivedQuantity * (float) $purchaseOrderItem->unit_cost,
@@ -77,6 +78,8 @@ class GoodsReceiptWorkflowService
                     (float) $purchaseOrderItem->unit_cost,
                     'PO receiving ' . $purchaseOrder->po_number,
                     $receivedAt,
+                    null,
+                    $purchaseOrderItem->product_variant_id ? (int) $purchaseOrderItem->product_variant_id : null,
                 );
 
                 $purchaseOrderItem->received_quantity = (float) $purchaseOrderItem->received_quantity + $receivedQuantity;
@@ -106,7 +109,7 @@ class GoodsReceiptWorkflowService
                 'total_received_qty' => (float) $goodsReceipt->total_quantity,
             ]);
 
-            return $goodsReceipt->fresh(['purchaseOrder', 'warehouse', 'items.product']);
+            return $goodsReceipt->fresh(['purchaseOrder', 'warehouse', 'items.product', 'items.productVariant']);
         });
     }
 

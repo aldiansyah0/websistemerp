@@ -14,6 +14,7 @@ class GoodsReceiptItem extends Model
         'goods_receipt_id',
         'purchase_order_item_id',
         'product_id',
+        'product_variant_id',
         'received_quantity',
         'unit_cost',
         'line_total',
@@ -23,6 +24,7 @@ class GoodsReceiptItem extends Model
     protected function casts(): array
     {
         return [
+            'product_variant_id' => 'integer',
             'received_quantity' => 'decimal:2',
             'unit_cost' => 'decimal:2',
             'line_total' => 'decimal:2',
@@ -42,5 +44,10 @@ class GoodsReceiptItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
     }
 }

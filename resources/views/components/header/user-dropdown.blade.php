@@ -1,3 +1,15 @@
+@php
+    /** @var \App\Models\User|null $authUser */
+    $authUser = auth()->user();
+    $initials = collect(explode(' ', trim((string) ($authUser?->name ?? 'ERP User'))))
+        ->filter()
+        ->map(fn (string $chunk): string => strtoupper(substr($chunk, 0, 1)))
+        ->take(2)
+        ->implode('');
+    $roleNames = $authUser?->roles()->pluck('name')->implode(', ');
+    $activeLocation = $authUser?->activeLocation?->name ?? $authUser?->location?->name;
+@endphp
+
 <div class="relative" x-data="{
     dropdownOpen: false,
     toggleDropdown() {
@@ -10,10 +22,10 @@
     <button class="flex items-center text-gray-700 dark:text-gray-400" @click.prevent="toggleDropdown()" type="button">
         <span
             class="mr-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gray-900 text-sm font-semibold text-white dark:bg-white dark:text-gray-900">
-            WS
+            {{ $initials !== '' ? $initials : 'WS' }}
         </span>
 
-        <span class="mr-1 block font-medium text-theme-sm">Admin ERP</span>
+        <span class="mr-1 block font-medium text-theme-sm">{{ $authUser?->name ?? 'ERP User' }}</span>
 
         <svg class="h-5 w-5 transition-transform duration-200" :class="{ 'rotate-180': dropdownOpen }" fill="none"
             stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -28,8 +40,13 @@
         class="absolute right-0 z-50 mt-[17px] flex w-[260px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark"
         style="display: none;">
         <div>
-            <span class="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">WebStellar ERP</span>
-            <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">admin@webstellarerp.local</span>
+            <span class="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
+                {{ $roleNames !== '' ? $roleNames : 'Role belum ditetapkan' }}
+            </span>
+            <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">{{ $authUser?->email ?? 'guest@webstellar.local' }}</span>
+            <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
+                {{ $activeLocation ? 'Lokasi aktif: ' . $activeLocation : 'Lokasi aktif: semua lokasi yang diizinkan' }}
+            </span>
         </div>
 
         <ul class="flex flex-col gap-1 border-b border-gray-200 pb-3 pt-4 dark:border-gray-800">

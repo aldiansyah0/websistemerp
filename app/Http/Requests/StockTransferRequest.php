@@ -17,10 +17,11 @@ class StockTransferRequest extends FormRequest
         $items = collect($this->input('items', []))
             ->map(fn ($item): array => [
                 'product_id' => $item['product_id'] ?? null,
+                'product_variant_id' => $item['product_variant_id'] ?? null,
                 'requested_quantity' => $item['requested_quantity'] ?? null,
                 'notes' => $item['notes'] ?? null,
             ])
-            ->filter(fn (array $item): bool => filled($item['product_id']) || filled($item['requested_quantity']) || filled($item['notes']))
+            ->filter(fn (array $item): bool => filled($item['product_id']) || filled($item['product_variant_id']) || filled($item['requested_quantity']) || filled($item['notes']))
             ->values()
             ->all();
 
@@ -42,10 +43,22 @@ class StockTransferRequest extends FormRequest
             'notes' => ['nullable', 'string'],
             'intent' => ['nullable', Rule::in(['draft', 'submit'])],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'distinct', 'exists:products,id'],
+            'items.*.product_id' => ['nullable', 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'exists:product_variants,id'],
             'items.*.requested_quantity' => ['required', 'numeric', 'gt:0'],
             'items.*.notes' => ['nullable', 'string'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            foreach ((array) $this->input('items', []) as $index => $item) {
+                if (blank($item['product_id'] ?? null) && blank($item['product_variant_id'] ?? null)) {
+                    $validator->errors()->add("items.$index.product_id", 'Setiap item wajib memiliki product_id atau product_variant_id.');
+                }
+            }
+        });
     }
 
     public function headerData(): array

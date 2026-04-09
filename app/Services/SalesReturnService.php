@@ -56,7 +56,7 @@ class SalesReturnService
                 'refund_amount' => (float) $return->refund_amount,
             ]);
 
-            return $return->fresh(['salesTransaction', 'items.product']);
+            return $return->fresh(['salesTransaction', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -116,6 +116,8 @@ class SalesReturnService
                     unitCost: (float) $item->unit_cost,
                     notes: 'Retur penjualan ' . $salesReturn->return_number,
                     transactionAt: Carbon::parse($salesReturn->return_date)->endOfDay(),
+                    transferStatus: null,
+                    productVariantId: $item->product_variant_id ? (int) $item->product_variant_id : null,
                 );
 
                 $refundAmount += (float) $item->line_total;
@@ -154,7 +156,7 @@ class SalesReturnService
                 'transaction_id' => $salesReturn->sales_transaction_id,
             ]);
 
-            return $salesReturn->fresh(['salesTransaction', 'items.product']);
+            return $salesReturn->fresh(['salesTransaction', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -201,6 +203,7 @@ class SalesReturnService
                 return [
                     'sales_transaction_item_id' => $line->id,
                     'product_id' => $line->product_id,
+                    'product_variant_id' => $line->product_variant_id,
                     'quantity' => $quantity,
                     'unit_price' => $unitPrice,
                     'unit_cost' => $unitCost,
@@ -227,6 +230,31 @@ class SalesReturnService
             return $salesTransaction->items
                 ->firstWhere('id', (int) $item['sales_transaction_item_id'])
                 ?? throw new DomainException('Line transaksi sumber tidak ditemukan untuk retur.');
+        }
+
+        if (isset($item['product_id']) && isset($item['product_variant_id'])) {
+            /** @var SalesTransactionItem|null $line */
+            $line = $salesTransaction->items
+                ->where('product_id', (int) $item['product_id'])
+                ->where('product_variant_id', (int) $item['product_variant_id'])
+                ->first(fn (SalesTransactionItem $candidate): bool => $this->maxReturnableQuantity($candidate) > 0);
+
+            if ($line !== null) {
+                return $line;
+            }
+
+            throw new DomainException('Kombinasi product_id dan product_variant_id pada item retur tidak valid.');
+        }
+
+        if (isset($item['product_variant_id'])) {
+            /** @var SalesTransactionItem|null $line */
+            $line = $salesTransaction->items
+                ->where('product_variant_id', (int) $item['product_variant_id'])
+                ->first(fn (SalesTransactionItem $candidate): bool => $this->maxReturnableQuantity($candidate) > 0);
+
+            if ($line !== null) {
+                return $line;
+            }
         }
 
         if (isset($item['product_id'])) {
@@ -304,4 +332,3 @@ class SalesReturnService
         return trim(trim((string) $existing) . PHP_EOL . $line);
     }
 }
-

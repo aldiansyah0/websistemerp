@@ -7,7 +7,7 @@ use Carbon\Carbon;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-class PayrollWorkflowService
+class PayrollService
 {
     public function __construct(
         private readonly AnalyticsCacheService $analyticsCacheService,

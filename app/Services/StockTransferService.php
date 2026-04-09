@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\StockTransfer;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -10,7 +11,7 @@ use Carbon\Carbon;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-class StockTransferWorkflowService
+class StockTransferService
 {
     public function __construct(
         private readonly StockService $stockService,
@@ -42,7 +43,7 @@ class StockTransferWorkflowService
                 'total_quantity' => (float) $transfer->total_quantity,
             ]);
 
-            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product']);
+            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -67,7 +68,7 @@ class StockTransferWorkflowService
                 'total_quantity' => (float) $transfer->total_quantity,
             ]);
 
-            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product']);
+            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -182,6 +183,8 @@ class StockTransferWorkflowService
                     (float) $transferItem->unit_cost,
                     'Transfer out ' . $transfer->transfer_number,
                     Carbon::now(),
+                    null,
+                    $transferItem->product_variant_id ? (int) $transferItem->product_variant_id : null,
                 );
 
                 $this->stockService->post(
@@ -194,6 +197,8 @@ class StockTransferWorkflowService
                     (float) $transferItem->unit_cost,
                     'Transfer in ' . $transfer->transfer_number,
                     Carbon::now(),
+                    null,
+                    $transferItem->product_variant_id ? (int) $transferItem->product_variant_id : null,
                 );
 
                 $transferItem->received_quantity = (float) $transferItem->received_quantity + $receivedQuantity;
@@ -220,7 +225,7 @@ class StockTransferWorkflowService
                 'transfer_number' => $transfer->transfer_number,
             ]);
 
-            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product']);
+            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -229,12 +234,26 @@ class StockTransferWorkflowService
         $transfer->items()->delete();
 
         $normalizedItems = collect($items)->map(function (array $item): array {
-            $product = Product::query()->findOrFail($item['product_id']);
+            if (isset($item['product_variant_id'])) {
+                $variant = ProductVariant::query()->with('product')->findOrFail((int) $item['product_variant_id']);
+                $product = $variant->product;
+                if (! $product instanceof Product) {
+                    throw new DomainException('Variant produk tidak memiliki master produk yang valid.');
+                }
+                if (isset($item['product_id']) && (int) $item['product_id'] !== (int) $product->id) {
+                    throw new DomainException('Kombinasi product_id dan product_variant_id pada transfer stok tidak valid.');
+                }
+            } else {
+                $product = Product::query()->findOrFail((int) $item['product_id']);
+                $variant = $this->stockService->resolveProductVariant((int) $product->id);
+            }
+
             $requestedQuantity = (float) $item['requested_quantity'];
-            $unitCost = (float) $product->cost_price;
+            $unitCost = (float) ($variant->cost_price ?? $product->cost_price);
 
             return [
                 'product_id' => $product->id,
+                'product_variant_id' => $variant?->id,
                 'requested_quantity' => $requestedQuantity,
                 'received_quantity' => 0,
                 'unit_cost' => $unitCost,

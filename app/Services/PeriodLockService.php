@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AccountingPeriod;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use DomainException;
@@ -34,9 +35,17 @@ class PeriodLockService
             });
         }
 
-        if ($user?->location_id !== null) {
-            $query->where(function ($builder) use ($user): void {
-                $builder->where('location_id', (int) $user->location_id)
+        if ($user instanceof User && $user->shouldConstrainLocation()) {
+            $locationIds = $user->scopedLocationIds();
+
+            $query->where(function ($builder) use ($locationIds): void {
+                if ($locationIds === []) {
+                    $builder->whereNull('location_id');
+
+                    return;
+                }
+
+                $builder->whereIn('location_id', $locationIds)
                     ->orWhereNull('location_id');
             });
         }
@@ -69,8 +78,9 @@ class PeriodLockService
                 throw new DomainException('Tanggal akhir periode tidak boleh sebelum tanggal mulai.');
             }
 
-            $tenantId = $attributes['tenant_id'] ?? Auth::user()?->tenant_id;
-            $locationId = $attributes['location_id'] ?? Auth::user()?->location_id;
+            $user = Auth::user();
+            $tenantId = $attributes['tenant_id'] ?? $user?->tenant_id;
+            $locationId = $attributes['location_id'] ?? (($user instanceof User) ? $user->resolveActiveLocationId() : $user?->location_id);
 
             $overlap = AccountingPeriod::query()
                 ->withoutTenantLocation()

@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\PurchaseOrder;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Warehouse;
 use App\Models\User;
 use DomainException;
@@ -10,12 +12,13 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class PurchaseOrderWorkflowService
+class PurchaseOrderService
 {
     public function __construct(
         private readonly AnalyticsCacheService $analyticsCacheService,
         private readonly PeriodLockService $periodLockService,
         private readonly AuditLogService $auditLogService,
+        private readonly StockService $stockService,
     ) {
     }
 
@@ -45,7 +48,7 @@ class PurchaseOrderWorkflowService
                 'total_amount' => (float) $purchaseOrder->total_amount,
             ]);
 
-            return $purchaseOrder->fresh(['supplier', 'warehouse', 'items.product']);
+            return $purchaseOrder->fresh(['supplier', 'warehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -72,7 +75,7 @@ class PurchaseOrderWorkflowService
                 'total_amount' => (float) $purchaseOrder->total_amount,
             ]);
 
-            return $purchaseOrder->fresh(['supplier', 'warehouse', 'items.product']);
+            return $purchaseOrder->fresh(['supplier', 'warehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -156,12 +159,29 @@ class PurchaseOrderWorkflowService
         $purchaseOrder->items()->delete();
 
         $normalizedItems = collect($items)->map(function (array $item): array {
+            $variant = null;
+
+            if (isset($item['product_variant_id'])) {
+                $variant = ProductVariant::query()->with('product')->findOrFail((int) $item['product_variant_id']);
+                $product = $variant->product;
+                if (! $product instanceof Product) {
+                    throw new DomainException('Variant produk tidak memiliki master produk yang valid.');
+                }
+                if (isset($item['product_id']) && (int) $item['product_id'] !== (int) $product->id) {
+                    throw new DomainException('Kombinasi product_id dan product_variant_id pada purchase order tidak valid.');
+                }
+            } else {
+                $product = Product::query()->findOrFail((int) $item['product_id']);
+                $variant = $this->stockService->resolveProductVariant((int) $product->id);
+            }
+
             $orderedQuantity = (float) $item['ordered_quantity'];
-            $unitCost = (float) $item['unit_cost'];
+            $unitCost = (float) ($item['unit_cost'] ?? $variant->cost_price ?? $product->cost_price);
             $discountAmount = (float) ($item['discount_amount'] ?? 0);
 
             return [
-                'product_id' => $item['product_id'],
+                'product_id' => (int) $product->id,
+                'product_variant_id' => $variant?->id,
                 'ordered_quantity' => $orderedQuantity,
                 'received_quantity' => 0,
                 'unit_cost' => $unitCost,

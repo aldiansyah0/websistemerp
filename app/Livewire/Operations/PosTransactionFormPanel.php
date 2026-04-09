@@ -7,7 +7,7 @@ use App\Models\Employee;
 use App\Models\Outlet;
 use App\Models\PaymentMethod;
 use App\Models\Product;
-use App\Services\SalesTransactionService;
+use App\Workflows\PosTransactionWorkflow;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Contracts\View\View;
@@ -158,7 +158,7 @@ class PosTransactionFormPanel extends Component
         }
     }
 
-    public function save(SalesTransactionService $salesTransactionService)
+    public function save(PosTransactionWorkflow $workflow)
     {
         $this->scanError = '';
 
@@ -243,7 +243,7 @@ class PosTransactionFormPanel extends Component
         ])->all();
 
         try {
-            $transaction = $salesTransactionService->store($header, $items, $payments);
+            $transaction = $workflow->store($header, $items, $payments);
         } catch (DomainException $exception) {
             $this->addError('workflow', $exception->getMessage());
 

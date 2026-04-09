@@ -14,6 +14,7 @@ class PurchaseReturnItem extends Model
         'purchase_return_id',
         'purchase_order_item_id',
         'product_id',
+        'product_variant_id',
         'quantity',
         'unit_cost',
         'line_total',
@@ -26,6 +27,7 @@ class PurchaseReturnItem extends Model
         return [
             'purchase_order_item_id' => 'integer',
             'product_id' => 'integer',
+            'product_variant_id' => 'integer',
             'quantity' => 'decimal:2',
             'unit_cost' => 'decimal:2',
             'line_total' => 'decimal:2',
@@ -46,5 +48,9 @@ class PurchaseReturnItem extends Model
     {
         return $this->belongsTo(Product::class);
     }
-}
 
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
+    }
+}

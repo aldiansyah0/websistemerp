@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\StockOpname;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -10,7 +11,7 @@ use Carbon\Carbon;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-class StockOpnameWorkflowService
+class StockOpnameService
 {
     public function __construct(
         private readonly StockService $stockService,
@@ -47,7 +48,7 @@ class StockOpnameWorkflowService
                 'warehouse_id' => $opname->warehouse_id,
             ]);
 
-            return $opname->fresh(['warehouse', 'items.product']);
+            return $opname->fresh(['warehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -80,7 +81,7 @@ class StockOpnameWorkflowService
                 'warehouse_id' => $opname->warehouse_id,
             ]);
 
-            return $opname->fresh(['warehouse', 'items.product']);
+            return $opname->fresh(['warehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -130,6 +131,8 @@ class StockOpnameWorkflowService
                     unitCost: (float) $item->unit_cost,
                     notes: 'Stock opname ' . $opname->opname_number,
                     transactionAt: Carbon::parse($opname->opname_date)->endOfDay(),
+                    transferStatus: null,
+                    productVariantId: $item->product_variant_id ? (int) $item->product_variant_id : null,
                 );
             }
 
@@ -144,7 +147,7 @@ class StockOpnameWorkflowService
                 'variance_qty' => (float) $opname->total_variance_qty,
             ]);
 
-            return $opname->fresh(['warehouse', 'items.product']);
+            return $opname->fresh(['warehouse', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -172,18 +175,33 @@ class StockOpnameWorkflowService
     private function syncItems(StockOpname $opname, array $items): void
     {
         $normalizedItems = collect($items)
-            ->filter(fn (array $item): bool => isset($item['product_id']))
+            ->filter(fn (array $item): bool => isset($item['product_id']) || isset($item['product_variant_id']))
             ->map(function (array $item) use ($opname): array {
-                $product = Product::query()->findOrFail($item['product_id']);
+                if (isset($item['product_variant_id'])) {
+                    $variant = ProductVariant::query()->with('product')->findOrFail((int) $item['product_variant_id']);
+                    $product = $variant->product;
+
+                    if (! $product instanceof Product) {
+                        throw new DomainException('Variant produk tidak memiliki master produk yang valid.');
+                    }
+                    if (isset($item['product_id']) && (int) $item['product_id'] !== (int) $product->id) {
+                        throw new DomainException('Kombinasi product_id dan product_variant_id pada stock opname tidak valid.');
+                    }
+                } else {
+                    $product = Product::query()->findOrFail((int) $item['product_id']);
+                    $variant = $this->stockService->resolveProductVariant((int) $product->id);
+                }
+
                 $systemQuantity = isset($item['system_quantity'])
                     ? (float) $item['system_quantity']
-                    : $this->stockService->currentBalance((int) $product->id, (int) $opname->warehouse_id);
+                    : $this->stockService->currentVariantBalance((int) $variant->id, (int) $opname->warehouse_id);
                 $physicalQuantity = (float) ($item['physical_quantity'] ?? $systemQuantity);
                 $variance = $physicalQuantity - $systemQuantity;
-                $unitCost = isset($item['unit_cost']) ? (float) $item['unit_cost'] : (float) $product->cost_price;
+                $unitCost = isset($item['unit_cost']) ? (float) $item['unit_cost'] : (float) ($variant->cost_price ?? $product->cost_price);
 
                 return [
                     'product_id' => $product->id,
+                    'product_variant_id' => $variant->id,
                     'system_quantity' => $systemQuantity,
                     'physical_quantity' => $physicalQuantity,
                     'variance_quantity' => $variance,
@@ -255,4 +273,3 @@ class StockOpnameWorkflowService
         return trim(trim((string) $existing) . PHP_EOL . $line);
     }
 }
-

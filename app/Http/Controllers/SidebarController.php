@@ -8,6 +8,6 @@ class SidebarController extends Controller
 {
     public static function getMenuData(): array
     {
-        return MenuHelper::getMenuGroups();
+        return MenuHelper::getVisibleMenuGroups();
     }
 }

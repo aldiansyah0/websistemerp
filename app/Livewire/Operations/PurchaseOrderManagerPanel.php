@@ -4,15 +4,15 @@ namespace App\Livewire\Operations;
 
 use App\Models\PurchaseOrder;
 use App\Models\Role;
-use App\Services\PurchaseOrderWorkflowService;
 use App\Services\RetailOperationsService;
+use App\Workflows\PurchaseOrderWorkflow;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
 
 class PurchaseOrderManagerPanel extends Component
 {
-    public function submitPurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflowService $workflow): void
+    public function submitPurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflow $workflow): void
     {
         $this->authorizeWorkflowAction();
 
@@ -29,7 +29,7 @@ class PurchaseOrderManagerPanel extends Component
         session()->flash('success', 'Purchase order ' . $purchaseOrder->po_number . ' berhasil dikirim ke approval.');
     }
 
-    public function approvePurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflowService $workflow): void
+    public function approvePurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflow $workflow): void
     {
         $this->authorizeWorkflowAction();
 
@@ -46,7 +46,7 @@ class PurchaseOrderManagerPanel extends Component
         session()->flash('success', 'Purchase order ' . $purchaseOrder->po_number . ' berhasil di-approve.');
     }
 
-    public function rejectPurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflowService $workflow): void
+    public function rejectPurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflow $workflow): void
     {
         $this->authorizeWorkflowAction();
 
@@ -63,7 +63,7 @@ class PurchaseOrderManagerPanel extends Component
         session()->flash('success', 'Purchase order ' . $purchaseOrder->po_number . ' ditandai sebagai rejected.');
     }
 
-    public function cancelPurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflowService $workflow): void
+    public function cancelPurchaseOrder(int $purchaseOrderId, PurchaseOrderWorkflow $workflow): void
     {
         $this->authorizeWorkflowAction();
 

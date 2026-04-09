@@ -1,3 +1,17 @@
+@php
+    use App\Models\User;
+    use App\Services\LocationAccessService;
+
+    /** @var User|null $authUser */
+    $authUser = auth()->user();
+    $locationService = app(LocationAccessService::class);
+    $switchableLocations = $authUser ? $locationService->availableLocations($authUser) : collect();
+    $activeLocationId = $authUser?->resolveActiveLocationId();
+    $scope = $authUser?->effectiveAccessScope();
+    $canClearSelection = in_array($scope, [User::ACCESS_SCOPE_ALL, User::ACCESS_SCOPE_ASSIGNED], true);
+    $canSwitchLocation = $authUser !== null && ($canClearSelection || $switchableLocations->count() > 1);
+@endphp
+
 <header
     class="sticky top-0 z-99999 flex w-full border-b border-gray-200 bg-white/90 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
     <div class="flex w-full flex-col items-center justify-between gap-4 px-3 py-3 xl:flex-row xl:px-6 lg:py-4">
@@ -55,6 +69,28 @@
             </div>
 
             <div class="ml-auto flex items-center gap-2 2xsm:gap-3">
+                @if ($canSwitchLocation)
+                    <form method="POST" action="{{ route('active-location.switch') }}" class="hidden lg:block">
+                        @csrf
+                        <label for="active-location-switch" class="sr-only">Pilih Outlet/Gudang Aktif</label>
+                        <select id="active-location-switch" name="location_id"
+                            onchange="this.form.submit()"
+                            class="h-11 min-w-[220px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white/90">
+                            @if ($canClearSelection)
+                                <option value="" {{ $activeLocationId === null ? 'selected' : '' }}>
+                                    Semua Lokasi Ditugaskan
+                                </option>
+                            @endif
+                            @foreach ($switchableLocations as $switchableLocation)
+                                <option value="{{ $switchableLocation->id }}"
+                                    {{ $activeLocationId === (int) $switchableLocation->id ? 'selected' : '' }}>
+                                    {{ $switchableLocation->code }} - {{ $switchableLocation->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </form>
+                @endif
+
                 <button
                     class="relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
                     @click="$store.theme.toggle()">

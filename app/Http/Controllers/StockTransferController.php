@@ -6,7 +6,7 @@ use App\Http\Requests\StockTransferReceiveRequest;
 use App\Http\Requests\StockTransferRequest;
 use App\Models\StockTransfer;
 use App\Services\RetailOperationsService;
-use App\Services\StockTransferWorkflowService;
+use App\Workflows\StockTransferWorkflow;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +19,7 @@ class StockTransferController extends Controller
         return view('pages.operations.stock-transfer-form', $retailOperationsService->stockTransferFormData());
     }
 
-    public function store(StockTransferRequest $request, StockTransferWorkflowService $workflow): RedirectResponse
+    public function store(StockTransferRequest $request, StockTransferWorkflow $workflow): RedirectResponse
     {
         $transfer = $workflow->store($request->headerData(), $request->lineItems(), $request->intent());
 
@@ -35,7 +35,7 @@ class StockTransferController extends Controller
         return view('pages.operations.stock-transfer-form', $retailOperationsService->stockTransferFormData($stockTransfer));
     }
 
-    public function update(StockTransferRequest $request, StockTransfer $stockTransfer, StockTransferWorkflowService $workflow): RedirectResponse
+    public function update(StockTransferRequest $request, StockTransfer $stockTransfer, StockTransferWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->update($stockTransfer, $request->headerData(), $request->lineItems(), $request->intent());
@@ -46,7 +46,7 @@ class StockTransferController extends Controller
         return redirect()->route('stock-mutation')->with('success', 'Transfer stok ' . $stockTransfer->transfer_number . ' berhasil diperbarui.');
     }
 
-    public function submit(StockTransfer $stockTransfer, StockTransferWorkflowService $workflow): RedirectResponse
+    public function submit(StockTransfer $stockTransfer, StockTransferWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->submit($stockTransfer);
@@ -57,7 +57,7 @@ class StockTransferController extends Controller
         return redirect()->route('stock-mutation')->with('success', 'Transfer stok ' . $stockTransfer->transfer_number . ' berhasil dikirim ke approval.');
     }
 
-    public function approve(StockTransfer $stockTransfer, StockTransferWorkflowService $workflow): RedirectResponse
+    public function approve(StockTransfer $stockTransfer, StockTransferWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->approve($stockTransfer);
@@ -68,7 +68,7 @@ class StockTransferController extends Controller
         return redirect()->route('stock-mutation')->with('success', 'Transfer stok ' . $stockTransfer->transfer_number . ' berhasil di-approve.');
     }
 
-    public function reject(Request $request, StockTransfer $stockTransfer, StockTransferWorkflowService $workflow): RedirectResponse
+    public function reject(Request $request, StockTransfer $stockTransfer, StockTransferWorkflow $workflow): RedirectResponse
     {
         $payload = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
@@ -83,7 +83,7 @@ class StockTransferController extends Controller
         return redirect()->route('stock-mutation')->with('success', 'Transfer stok ' . $stockTransfer->transfer_number . ' ditandai sebagai rejected.');
     }
 
-    public function cancel(Request $request, StockTransfer $stockTransfer, StockTransferWorkflowService $workflow): RedirectResponse
+    public function cancel(Request $request, StockTransfer $stockTransfer, StockTransferWorkflow $workflow): RedirectResponse
     {
         $payload = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
@@ -107,7 +107,7 @@ class StockTransferController extends Controller
         return view('pages.operations.stock-transfer-receive-form', $retailOperationsService->stockTransferReceiveFormData($stockTransfer));
     }
 
-    public function receive(StockTransferReceiveRequest $request, StockTransfer $stockTransfer, StockTransferWorkflowService $workflow): RedirectResponse
+    public function receive(StockTransferReceiveRequest $request, StockTransfer $stockTransfer, StockTransferWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->receive($stockTransfer, $request->lineItems(), $request->validated('notes'));

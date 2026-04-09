@@ -3,6 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Models\Tenant;
+use App\Models\User;
 use App\Models\Scopes\TenantLocationScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -25,8 +26,10 @@ trait BelongsToTenantLocation
                 $model->setAttribute('tenant_id', (int) $tenantId);
             }
 
-            if (method_exists($model, 'usesLocationScope') && $model->usesLocationScope() && blank($model->getAttribute('location_id')) && filled($user?->location_id)) {
-                $model->setAttribute('location_id', (int) $user->location_id);
+            $resolvedLocationId = self::resolvedUserLocationId($user);
+
+            if (method_exists($model, 'usesLocationScope') && $model->usesLocationScope() && blank($model->getAttribute('location_id')) && filled($resolvedLocationId)) {
+                $model->setAttribute('location_id', (int) $resolvedLocationId);
             }
         });
     }
@@ -61,5 +64,14 @@ trait BelongsToTenantLocation
         static::$resolvedDefaultTenantId = (int) Tenant::query()->where('code', 'default')->value('id');
 
         return static::$resolvedDefaultTenantId > 0 ? static::$resolvedDefaultTenantId : null;
+    }
+
+    private static function resolvedUserLocationId(mixed $user): ?int
+    {
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        return $user->resolveActiveLocationId();
     }
 }

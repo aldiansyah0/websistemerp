@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\PayrollGenerateRequest;
 use App\Models\PayrollRun;
 use App\Services\PayrollCalculationService;
-use App\Services\PayrollWorkflowService;
+use App\Workflows\PayrollWorkflow;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 
@@ -24,7 +24,7 @@ class PayrollController extends Controller
             ->with('success', 'Payroll otomatis ' . $payrollRun->code . ' berhasil digenerate dari data POS dan absensi.');
     }
 
-    public function submit(PayrollRun $payrollRun, PayrollWorkflowService $workflow): RedirectResponse
+    public function submit(PayrollRun $payrollRun, PayrollWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->submit($payrollRun);
@@ -35,7 +35,7 @@ class PayrollController extends Controller
         return redirect()->route('payroll-list')->with('success', 'Payroll ' . $payrollRun->code . ' berhasil dikirim ke proses approval.');
     }
 
-    public function approve(PayrollRun $payrollRun, PayrollWorkflowService $workflow): RedirectResponse
+    public function approve(PayrollRun $payrollRun, PayrollWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->approve($payrollRun);
@@ -46,7 +46,7 @@ class PayrollController extends Controller
         return redirect()->route('payroll-list')->with('success', 'Payroll ' . $payrollRun->code . ' berhasil di-approve finance.');
     }
 
-    public function pay(PayrollRun $payrollRun, PayrollWorkflowService $workflow): RedirectResponse
+    public function pay(PayrollRun $payrollRun, PayrollWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->pay($payrollRun);

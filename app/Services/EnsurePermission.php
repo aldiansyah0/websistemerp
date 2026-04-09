@@ -24,7 +24,7 @@ class EnsurePermission
             abort(403, 'Akses ditolak. Silakan login terlebih dahulu.');
         }
 
-        if ($user->hasRole(Role::OWNER)) {
+        if ($user->hasRole([Role::OWNER, Role::SUPER_ADMIN])) {
             return $next($request);
         }
 

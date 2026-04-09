@@ -13,6 +13,7 @@ class StockTransferItem extends Model
     protected $fillable = [
         'stock_transfer_id',
         'product_id',
+        'product_variant_id',
         'requested_quantity',
         'received_quantity',
         'unit_cost',
@@ -23,6 +24,7 @@ class StockTransferItem extends Model
     protected function casts(): array
     {
         return [
+            'product_variant_id' => 'integer',
             'requested_quantity' => 'decimal:2',
             'received_quantity' => 'decimal:2',
             'unit_cost' => 'decimal:2',
@@ -38,5 +40,10 @@ class StockTransferItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
     }
 }

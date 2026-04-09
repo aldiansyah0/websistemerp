@@ -14,6 +14,7 @@ class SalesTransactionItem extends Model
     protected $fillable = [
         'sales_transaction_id',
         'product_id',
+        'product_variant_id',
         'quantity',
         'unit_price',
         'unit_cost',
@@ -25,6 +26,7 @@ class SalesTransactionItem extends Model
     protected function casts(): array
     {
         return [
+            'product_variant_id' => 'integer',
             'quantity' => 'decimal:2',
             'unit_price' => 'decimal:2',
             'unit_cost' => 'decimal:2',
@@ -41,6 +43,11 @@ class SalesTransactionItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
     }
 
     public function returnItems(): HasMany

@@ -1,7 +1,7 @@
 @php
     use App\Helpers\MenuHelper;
 
-    $menuGroups = MenuHelper::getMenuGroups();
+    $menuGroups = MenuHelper::getVisibleMenuGroups();
 @endphp
 
 <div class="space-y-6">

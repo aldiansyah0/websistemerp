@@ -30,6 +30,8 @@ class RolePermissionSeeder extends Seeder
             ['name' => 'Close Finance Period', 'slug' => 'finance.period.close', 'description' => 'Tutup atau buka periode posting keuangan.'],
             ['name' => 'Manage Cash Reconciliation', 'slug' => 'finance.reconciliation.manage', 'description' => 'Kelola rekonsiliasi kas/bank harian.'],
             ['name' => 'View Audit Trail', 'slug' => 'audit.log.view', 'description' => 'Akses audit trail untuk monitoring approval dan posting kritikal.'],
+            ['name' => 'Manage System Config', 'slug' => 'system.config.manage', 'description' => 'Kelola konfigurasi sistem tingkat lanjut dan parameter global.'],
+            ['name' => 'Manage User Access', 'slug' => 'security.user.manage', 'description' => 'Kelola role, permission, dan assignment akses lokasi user.'],
         ];
 
         foreach ($permissions as $permission) {
@@ -39,48 +41,91 @@ class RolePermissionSeeder extends Seeder
             );
         }
 
-        $ownerRole = Role::query()->updateOrCreate(
-            ['slug' => Role::OWNER],
-            [
-                'name' => 'Owner',
-                'description' => 'Akses penuh seluruh modul ERP.',
-                'is_system' => true,
-            ]
-        );
-        $cashierRole = Role::query()->updateOrCreate(
-            ['slug' => Role::CASHIER],
-            [
-                'name' => 'Cashier',
-                'description' => 'Akses operasional kasir dan POS.',
-                'is_system' => true,
-            ]
-        );
-        $warehouseRole = Role::query()->updateOrCreate(
-            ['slug' => Role::WAREHOUSE_MANAGER],
-            [
-                'name' => 'Warehouse Manager',
-                'description' => 'Akses operasional gudang, transfer, dan procurement.',
-                'is_system' => true,
-            ]
-        );
-        $financeRole = Role::query()->updateOrCreate(
-            ['slug' => Role::FINANCE],
-            [
-                'name' => 'Finance',
-                'description' => 'Akses kontrol keuangan dan persetujuan finansial.',
-                'is_system' => true,
-            ]
-        );
+        $roles = [
+            Role::OWNER => ['name' => 'Owner', 'description' => 'Akses penuh lintas outlet dan seluruh modul ERP.'],
+            Role::MANAGER => ['name' => 'Manager', 'description' => 'Pengawas operasional regional/multi outlet.'],
+            Role::HRD => ['name' => 'HRD', 'description' => 'Kelola karyawan, absensi, payroll, dan mutasi antar outlet.'],
+            Role::SUPER_ADMIN => ['name' => 'Super Admin', 'description' => 'Role teknis untuk konfigurasi sistem dan hak akses.'],
+            Role::ADMIN => ['name' => 'Admin Cabang', 'description' => 'Penanggung jawab operasional satu outlet/cabang.'],
+            Role::STAFF_ADMIN => ['name' => 'Staff Admin', 'description' => 'Input data administratif operasional outlet.'],
+            Role::CASHIER => ['name' => 'Cashier', 'description' => 'Akses operasional kasir dan transaksi POS.'],
+            Role::STAFF_OUTLET => ['name' => 'Staff Outlet', 'description' => 'Fokus ke aktivitas inventory fisik dan penerimaan mutasi.'],
+            Role::WAREHOUSE_MANAGER => ['name' => 'Warehouse Manager', 'description' => 'Akses operasional gudang, transfer, dan procurement.'],
+            Role::FINANCE => ['name' => 'Finance', 'description' => 'Akses kontrol keuangan dan persetujuan finansial.'],
+        ];
 
-        $ownerRole->permissions()->sync(Permission::query()->pluck('id')->all());
-        $cashierRole->permissions()->sync(
-            Permission::query()
+        $roleModels = collect($roles)->mapWithKeys(function (array $meta, string $slug): array {
+            $role = Role::query()->updateOrCreate(
+                ['slug' => $slug],
+                [
+                    'name' => $meta['name'],
+                    'description' => $meta['description'],
+                    'is_system' => true,
+                ]
+            );
+
+            return [$slug => $role];
+        });
+
+        $permissionMap = [
+            Role::OWNER => Permission::query()->pluck('id')->all(),
+            Role::SUPER_ADMIN => Permission::query()->pluck('id')->all(),
+            Role::MANAGER => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'master-data.manage',
+                    'inventory.transfer.manage',
+                    'inventory.opname.manage',
+                    'procurement.purchase.manage',
+                    'procurement.return.manage',
+                    'sales.pos.manage',
+                    'sales.return.manage',
+                    'finance.report.export',
+                    'finance.reconciliation.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::HRD => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'hr.employee.manage',
+                    'hr.shift.manage',
+                    'hr.payroll.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::ADMIN => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'sales.pos.manage',
+                    'inventory.transfer.manage',
+                    'inventory.opname.manage',
+                    'procurement.purchase.manage',
+                    'procurement.return.manage',
+                    'sales.return.manage',
+                    'hr.shift.manage',
+                    'finance.reconciliation.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::STAFF_ADMIN => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'inventory.transfer.manage',
+                    'procurement.purchase.manage',
+                    'hr.shift.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::CASHIER => Permission::query()
                 ->whereIn('slug', ['dashboard.view', 'sales.pos.manage', 'sales.return.manage'])
                 ->pluck('id')
-                ->all()
-        );
-        $warehouseRole->permissions()->sync(
-            Permission::query()
+                ->all(),
+            Role::STAFF_OUTLET => Permission::query()
+                ->whereIn('slug', ['dashboard.view', 'inventory.transfer.manage'])
+                ->pluck('id')
+                ->all(),
+            Role::WAREHOUSE_MANAGER => Permission::query()
                 ->whereIn('slug', [
                     'dashboard.view',
                     'inventory.transfer.manage',
@@ -89,10 +134,8 @@ class RolePermissionSeeder extends Seeder
                     'procurement.return.manage',
                 ])
                 ->pluck('id')
-                ->all()
-        );
-        $financeRole->permissions()->sync(
-            Permission::query()
+                ->all(),
+            Role::FINANCE => Permission::query()
                 ->whereIn('slug', [
                     'dashboard.view',
                     'finance.payroll.approve',
@@ -102,57 +145,172 @@ class RolePermissionSeeder extends Seeder
                     'audit.log.view',
                 ])
                 ->pluck('id')
-                ->all()
-        );
+                ->all(),
+        ];
+
+        foreach ($permissionMap as $roleSlug => $permissionIds) {
+            $role = $roleModels->get($roleSlug);
+            if ($role instanceof Role) {
+                $role->permissions()->sync($permissionIds);
+            }
+        }
 
         $tenantId = Tenant::query()->where('code', 'default')->value('id');
-        $defaultLocationId = Location::query()->orderBy('id')->value('id');
+        $allLocationIds = Location::query()->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id);
+        $outletLocationIds = Location::query()
+            ->where('type', Location::TYPE_OUTLET)
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id);
 
-        $owner = User::query()->updateOrCreate(
-            ['email' => 'owner@webstellar.local'],
-            [
-                'name' => 'Owner ERP',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
+        $defaultLocationId = (int) ($outletLocationIds->first() ?? $allLocationIds->first() ?? 0);
+        $secondaryLocationId = (int) ($outletLocationIds->skip(1)->first() ?? $defaultLocationId);
+        $tertiaryLocationId = (int) ($outletLocationIds->skip(2)->first() ?? $secondaryLocationId);
+
+        $owner = $this->upsertUser(
+            email: 'owner@webstellar.local',
+            name: 'Owner ERP',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_ALL,
+            locationId: null,
+            activeLocationId: null,
         );
-        $cashier = User::query()->updateOrCreate(
-            ['email' => 'cashier@webstellar.local'],
-            [
-                'name' => 'Kasir Outlet',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
+        $superAdmin = $this->upsertUser(
+            email: 'superadmin@webstellar.local',
+            name: 'Super Admin ERP',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_ALL,
+            locationId: null,
+            activeLocationId: null,
         );
-        $warehouseManager = User::query()->updateOrCreate(
-            ['email' => 'warehouse@webstellar.local'],
-            [
-                'name' => 'Manager Gudang',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
+        $manager = $this->upsertUser(
+            email: 'manager@webstellar.local',
+            name: 'Manager Regional',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_ASSIGNED,
+            locationId: null,
+            activeLocationId: null,
         );
-        $financeUser = User::query()->updateOrCreate(
-            ['email' => 'finance@webstellar.local'],
-            [
-                'name' => 'Finance ERP',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
+        $hrd = $this->upsertUser(
+            email: 'hrd@webstellar.local',
+            name: 'HRD Pusat',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_ASSIGNED,
+            locationId: null,
+            activeLocationId: null,
+        );
+        $financeUser = $this->upsertUser(
+            email: 'finance@webstellar.local',
+            name: 'Finance ERP',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_ASSIGNED,
+            locationId: $defaultLocationId > 0 ? $defaultLocationId : null,
+            activeLocationId: $defaultLocationId > 0 ? $defaultLocationId : null,
+        );
+        $adminBranch = $this->upsertUser(
+            email: 'admin.branch@webstellar.local',
+            name: 'Admin Cabang',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_SINGLE,
+            locationId: $secondaryLocationId > 0 ? $secondaryLocationId : ($defaultLocationId > 0 ? $defaultLocationId : null),
+            activeLocationId: $secondaryLocationId > 0 ? $secondaryLocationId : ($defaultLocationId > 0 ? $defaultLocationId : null),
+        );
+        $staffAdmin = $this->upsertUser(
+            email: 'staff.admin@webstellar.local',
+            name: 'Staff Admin Outlet',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_SINGLE,
+            locationId: $secondaryLocationId > 0 ? $secondaryLocationId : ($defaultLocationId > 0 ? $defaultLocationId : null),
+            activeLocationId: $secondaryLocationId > 0 ? $secondaryLocationId : ($defaultLocationId > 0 ? $defaultLocationId : null),
+        );
+        $cashier = $this->upsertUser(
+            email: 'cashier@webstellar.local',
+            name: 'Kasir Outlet',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_SINGLE,
+            locationId: $defaultLocationId > 0 ? $defaultLocationId : null,
+            activeLocationId: $defaultLocationId > 0 ? $defaultLocationId : null,
+        );
+        $staffOutlet = $this->upsertUser(
+            email: 'staff.outlet@webstellar.local',
+            name: 'Staff Outlet',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_SINGLE,
+            locationId: $tertiaryLocationId > 0 ? $tertiaryLocationId : ($defaultLocationId > 0 ? $defaultLocationId : null),
+            activeLocationId: $tertiaryLocationId > 0 ? $tertiaryLocationId : ($defaultLocationId > 0 ? $defaultLocationId : null),
+        );
+        $warehouseManager = $this->upsertUser(
+            email: 'warehouse@webstellar.local',
+            name: 'Manager Gudang',
+            tenantId: $tenantId,
+            accessScope: User::ACCESS_SCOPE_SINGLE,
+            locationId: $defaultLocationId > 0 ? $defaultLocationId : null,
+            activeLocationId: $defaultLocationId > 0 ? $defaultLocationId : null,
         );
 
-        $owner->roles()->syncWithoutDetaching([$ownerRole->id]);
-        $cashier->roles()->syncWithoutDetaching([$cashierRole->id]);
-        $warehouseManager->roles()->syncWithoutDetaching([$warehouseRole->id]);
-        $financeUser->roles()->syncWithoutDetaching([$financeRole->id]);
+        $owner->roles()->syncWithoutDetaching([$roleModels[Role::OWNER]->id]);
+        $superAdmin->roles()->syncWithoutDetaching([$roleModels[Role::SUPER_ADMIN]->id]);
+        $manager->roles()->syncWithoutDetaching([$roleModels[Role::MANAGER]->id]);
+        $hrd->roles()->syncWithoutDetaching([$roleModels[Role::HRD]->id]);
+        $financeUser->roles()->syncWithoutDetaching([$roleModels[Role::FINANCE]->id]);
+        $adminBranch->roles()->syncWithoutDetaching([$roleModels[Role::ADMIN]->id]);
+        $staffAdmin->roles()->syncWithoutDetaching([$roleModels[Role::STAFF_ADMIN]->id]);
+        $cashier->roles()->syncWithoutDetaching([$roleModels[Role::CASHIER]->id]);
+        $staffOutlet->roles()->syncWithoutDetaching([$roleModels[Role::STAFF_OUTLET]->id]);
+        $warehouseManager->roles()->syncWithoutDetaching([$roleModels[Role::WAREHOUSE_MANAGER]->id]);
 
-        User::query()
-            ->where('email', 'test@example.com')
-            ->get()
-            ->each(fn (User $user) => $user->roles()->syncWithoutDetaching([$ownerRole->id]));
+        $managerAssignedLocations = $outletLocationIds->take(3)->values()->all();
+        if ($managerAssignedLocations === []) {
+            $managerAssignedLocations = $allLocationIds->values()->all();
+        }
+
+        $hrdAssignedLocations = $outletLocationIds->values()->all();
+        if ($hrdAssignedLocations === []) {
+            $hrdAssignedLocations = $allLocationIds->values()->all();
+        }
+
+        $owner->allowedLocations()->sync($allLocationIds->all());
+        $superAdmin->allowedLocations()->sync($allLocationIds->all());
+        $manager->allowedLocations()->sync($managerAssignedLocations);
+        $hrd->allowedLocations()->sync($hrdAssignedLocations);
+        $financeUser->allowedLocations()->sync($allLocationIds->all());
+        $warehouseManager->allowedLocations()->sync($warehouseManager->location_id !== null ? [(int) $warehouseManager->location_id] : []);
+        $cashier->allowedLocations()->sync($cashier->location_id !== null ? [(int) $cashier->location_id] : []);
+        $adminBranch->allowedLocations()->sync($adminBranch->location_id !== null ? [(int) $adminBranch->location_id] : []);
+        $staffAdmin->allowedLocations()->sync($staffAdmin->location_id !== null ? [(int) $staffAdmin->location_id] : []);
+        $staffOutlet->allowedLocations()->sync($staffOutlet->location_id !== null ? [(int) $staffOutlet->location_id] : []);
+
+        User::query()->where('email', 'test@example.com')->get()->each(function (User $user) use ($roleModels, $allLocationIds, $tenantId): void {
+            $user->forceFill([
+                'tenant_id' => $tenantId,
+                'access_scope' => User::ACCESS_SCOPE_ALL,
+                'location_id' => null,
+                'active_location_id' => null,
+            ])->save();
+
+            $user->roles()->syncWithoutDetaching([$roleModels[Role::OWNER]->id]);
+            $user->allowedLocations()->sync($allLocationIds->all());
+        });
+    }
+
+    private function upsertUser(
+        string $email,
+        string $name,
+        ?int $tenantId,
+        string $accessScope,
+        ?int $locationId,
+        ?int $activeLocationId
+    ): User {
+        return User::query()->updateOrCreate(
+            ['email' => $email],
+            [
+                'name' => $name,
+                'password' => 'password',
+                'tenant_id' => $tenantId,
+                'access_scope' => $accessScope,
+                'location_id' => $locationId,
+                'active_location_id' => $activeLocationId,
+            ]
+        );
     }
 }

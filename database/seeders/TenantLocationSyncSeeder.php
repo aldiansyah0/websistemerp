@@ -190,5 +190,11 @@ class TenantLocationSyncSeeder extends Seeder
             'tenant_id' => $tenantId,
             'location_id' => $fallbackLocation,
         ]);
+
+        if ($fallbackLocation !== null) {
+            PayrollRun::query()->whereNull('location_id')->update([
+                'location_id' => $fallbackLocation,
+            ]);
+        }
     }
 }
