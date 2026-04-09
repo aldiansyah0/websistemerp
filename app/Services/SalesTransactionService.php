@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Outlet;
 use App\Models\PaymentMethod;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\SalesTransaction;
 use Carbon\CarbonImmutable;
 use DomainException;
@@ -63,10 +64,25 @@ class SalesTransactionService
             $normalizedItems = [];
 
             foreach ($items as $item) {
-                $product = Product::query()->findOrFail($item['product_id']);
+                $variant = null;
+
+                if (isset($item['product_variant_id'])) {
+                    $variant = ProductVariant::query()->with('product')->findOrFail((int) $item['product_variant_id']);
+                    $product = $variant->product;
+                    if ($product === null) {
+                        throw new DomainException('Variant produk tidak memiliki master produk yang valid.');
+                    }
+                    if (isset($item['product_id']) && (int) $item['product_id'] !== (int) $product->id) {
+                        throw new DomainException('Kombinasi product_id dan product_variant_id pada transaksi POS tidak valid.');
+                    }
+                } else {
+                    $product = Product::query()->findOrFail($item['product_id']);
+                    $variant = $this->stockService->resolveProductVariant((int) $product->id);
+                }
+
                 $quantity = (float) $item['quantity'];
-                $unitPrice = (float) ($item['unit_price'] ?? $product->selling_price);
-                $unitCost = (float) $product->cost_price;
+                $unitPrice = (float) ($item['unit_price'] ?? $variant->selling_price ?? $product->selling_price);
+                $unitCost = (float) ($variant->cost_price ?? $product->cost_price);
                 $lineDiscount = (float) ($item['discount_amount'] ?? 0);
                 $lineGross = $quantity * $unitPrice;
                 $lineTotal = max($lineGross - $lineDiscount, 0);
@@ -79,6 +95,7 @@ class SalesTransactionService
 
                 $normalizedItems[] = [
                     'product_id' => $product->id,
+                    'product_variant_id' => $variant?->id,
                     'quantity' => $quantity,
                     'unit_price' => $unitPrice,
                     'unit_cost' => $unitCost,
@@ -123,6 +140,8 @@ class SalesTransactionService
                     (float) $line['unit_cost'],
                     'POS ' . $transaction->transaction_number,
                     $soldAt,
+                    null,
+                    isset($line['product_variant_id']) ? (int) $line['product_variant_id'] : null,
                 );
             }
 
@@ -161,7 +180,7 @@ class SalesTransactionService
                 'items_count' => $transaction->items_count,
             ]);
 
-            return $transaction->fresh(['outlet', 'cashier', 'customer', 'items.product', 'payments.paymentMethod']);
+            return $transaction->fresh(['outlet', 'cashier', 'customer', 'items.product', 'items.productVariant', 'payments.paymentMethod']);
         } catch (Throwable $exception) {
             DB::rollBack();
             $this->auditLogService->log('sales', 'pos.store_failed', 'Posting transaksi POS gagal', 'sales_transaction', [

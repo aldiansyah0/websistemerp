@@ -7,7 +7,7 @@ use App\Http\Requests\SalesSettlementRequest;
 use App\Models\SalesTransaction;
 use App\Services\RetailOperationsService;
 use App\Services\SalesSettlementService;
-use App\Services\SalesTransactionService;
+use App\Workflows\PosTransactionWorkflow;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -21,10 +21,10 @@ class SalesTransactionController extends Controller
         ]);
     }
 
-    public function store(SalesTransactionRequest $request, SalesTransactionService $salesTransactionService): RedirectResponse
+    public function store(SalesTransactionRequest $request, PosTransactionWorkflow $workflow): RedirectResponse
     {
         try {
-            $transaction = $salesTransactionService->store(
+            $transaction = $workflow->store(
                 $request->headerData(),
                 $request->lineItems(),
                 $request->paymentLines(),

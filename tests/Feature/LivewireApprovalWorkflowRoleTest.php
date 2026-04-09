@@ -5,7 +5,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
-use App\Services\PurchaseOrderWorkflowService;
+use App\Workflows\PurchaseOrderWorkflow;
 use Livewire\Livewire;
 
 beforeEach(function (): void {
@@ -80,7 +80,7 @@ function createPurchaseOrderForLivewireApproval(string $intent): PurchaseOrder
     $warehouse = Warehouse::query()->where('is_active', true)->orderBy('id')->firstOrFail();
     $products = \App\Models\Product::query()->where('status', \App\Models\Product::STATUS_ACTIVE)->limit(2)->get();
 
-    $workflow = app(PurchaseOrderWorkflowService::class);
+    $workflow = app(PurchaseOrderWorkflow::class);
 
     return $workflow->store(
         attributes: [

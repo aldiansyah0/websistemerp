@@ -19,7 +19,8 @@ class StockOpnameRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:1000'],
             'intent' => ['nullable', 'in:draft,submit'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.system_quantity' => ['nullable', 'numeric', 'min:0'],
             'items.*.physical_quantity' => ['required', 'numeric', 'min:0'],
             'items.*.unit_cost' => ['nullable', 'numeric', 'min:0'],
@@ -45,5 +46,15 @@ class StockOpnameRequest extends FormRequest
 
         return $validated['intent'] ?? 'draft';
     }
-}
 
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            foreach ((array) $this->input('items', []) as $index => $item) {
+                if (blank($item['product_id'] ?? null) && blank($item['product_variant_id'] ?? null)) {
+                    $validator->errors()->add("items.$index.product_id", 'Setiap item wajib memiliki product_id atau product_variant_id.');
+                }
+            }
+        });
+    }
+}

@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\GoodsReceiptRequest;
 use App\Models\PurchaseOrder;
-use App\Services\GoodsReceiptWorkflowService;
 use App\Services\RetailOperationsService;
+use App\Workflows\GoodsReceiptWorkflow;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -21,7 +21,7 @@ class GoodsReceiptController extends Controller
         return view('pages.operations.goods-receipt-form', $retailOperationsService->goodsReceiptFormData($purchaseOrder));
     }
 
-    public function store(GoodsReceiptRequest $request, PurchaseOrder $purchaseOrder, GoodsReceiptWorkflowService $workflow): RedirectResponse
+    public function store(GoodsReceiptRequest $request, PurchaseOrder $purchaseOrder, GoodsReceiptWorkflow $workflow): RedirectResponse
     {
         try {
             $receipt = $workflow->receive($purchaseOrder, $request->headerData(), $request->lineItems());

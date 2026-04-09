@@ -1,0 +1,316 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Models\StockTransfer;
+use App\Models\User;
+use App\Models\Warehouse;
+use Carbon\Carbon;
+use DomainException;
+use Illuminate\Support\Facades\DB;
+
+class StockTransferService
+{
+    public function __construct(
+        private readonly StockService $stockService,
+        private readonly AnalyticsCacheService $analyticsCacheService,
+        private readonly PeriodLockService $periodLockService,
+        private readonly AuditLogService $auditLogService,
+    ) {
+    }
+
+    public function store(array $attributes, array $items, string $intent = 'draft'): StockTransfer
+    {
+        return DB::transaction(function () use ($attributes, $items, $intent): StockTransfer {
+            $sourceWarehouse = Warehouse::query()->findOrFail($attributes['source_warehouse_id']);
+            $transfer = new StockTransfer($attributes);
+            $transfer->tenant_id = $sourceWarehouse->tenant_id;
+            $transfer->location_id = $sourceWarehouse->location_id;
+            $transfer->transfer_number = $this->generateNumber();
+            $transfer->requested_by = $this->actorId();
+
+            $this->applyIntent($transfer, $intent);
+            $transfer->save();
+
+            $this->syncItems($transfer, $items);
+            $this->analyticsCacheService->invalidate();
+            $this->auditLogService->log('inventory', 'stock_transfer.store', 'Transfer stok dibuat', $transfer, [
+                'status' => $transfer->status,
+                'source_warehouse_id' => $transfer->source_warehouse_id,
+                'destination_warehouse_id' => $transfer->destination_warehouse_id,
+                'total_quantity' => (float) $transfer->total_quantity,
+            ]);
+
+            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productVariant']);
+        });
+    }
+
+    public function update(StockTransfer $transfer, array $attributes, array $items, string $intent = 'draft'): StockTransfer
+    {
+        if (! $transfer->canBeEdited()) {
+            throw new DomainException('Transfer stok ini sudah tidak bisa diubah.');
+        }
+
+        return DB::transaction(function () use ($transfer, $attributes, $items, $intent): StockTransfer {
+            $sourceWarehouse = Warehouse::query()->findOrFail($attributes['source_warehouse_id']);
+            $transfer->fill($attributes);
+            $transfer->tenant_id = $sourceWarehouse->tenant_id;
+            $transfer->location_id = $sourceWarehouse->location_id;
+            $this->applyIntent($transfer, $intent);
+            $transfer->save();
+
+            $this->syncItems($transfer, $items);
+            $this->analyticsCacheService->invalidate();
+            $this->auditLogService->log('inventory', 'stock_transfer.update', 'Transfer stok diperbarui', $transfer, [
+                'status' => $transfer->status,
+                'total_quantity' => (float) $transfer->total_quantity,
+            ]);
+
+            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productVariant']);
+        });
+    }
+
+    public function submit(StockTransfer $transfer): StockTransfer
+    {
+        if (! in_array($transfer->status, [StockTransfer::STATUS_DRAFT, StockTransfer::STATUS_REJECTED], true)) {
+            throw new DomainException('Hanya transfer draft atau rejected yang bisa disubmit ulang.');
+        }
+
+        $transfer->status = StockTransfer::STATUS_PENDING_APPROVAL;
+        $transfer->submitted_at = Carbon::now();
+        $transfer->approved_at = null;
+        $transfer->approved_by = null;
+        $transfer->save();
+        $this->analyticsCacheService->invalidate();
+        $this->auditLogService->log('inventory', 'stock_transfer.submit', 'Transfer stok dikirim ke approval', $transfer, [
+            'status' => $transfer->status,
+        ]);
+
+        return $transfer;
+    }
+
+    public function approve(StockTransfer $transfer): StockTransfer
+    {
+        if (! $transfer->canBeApproved()) {
+            throw new DomainException('Transfer stok ini tidak berada pada status pending approval.');
+        }
+
+        $transfer->status = StockTransfer::STATUS_APPROVED;
+        $transfer->approved_at = Carbon::now();
+        $transfer->approved_by = $this->actorId();
+        $transfer->save();
+        $this->analyticsCacheService->invalidate();
+        $this->auditLogService->log('inventory', 'stock_transfer.approve', 'Transfer stok disetujui', $transfer, [
+            'status' => $transfer->status,
+        ]);
+
+        return $transfer;
+    }
+
+    public function reject(StockTransfer $transfer, ?string $reason = null): StockTransfer
+    {
+        if (! $transfer->canBeApproved()) {
+            throw new DomainException('Hanya transfer stok pending approval yang bisa ditolak.');
+        }
+
+        $transfer->status = StockTransfer::STATUS_REJECTED;
+        $transfer->approved_at = null;
+        $transfer->approved_by = null;
+        $transfer->notes = $this->appendReason($transfer->notes, 'Rejected', $reason);
+        $transfer->save();
+        $this->analyticsCacheService->invalidate();
+        $this->auditLogService->log('inventory', 'stock_transfer.reject', 'Transfer stok ditolak', $transfer, [
+            'status' => $transfer->status,
+            'reason' => $reason,
+        ]);
+
+        return $transfer;
+    }
+
+    public function cancel(StockTransfer $transfer, ?string $reason = null): StockTransfer
+    {
+        if (! $transfer->canBeCancelled()) {
+            throw new DomainException('Transfer stok ini tidak bisa dibatalkan pada status saat ini.');
+        }
+
+        $transfer->status = StockTransfer::STATUS_CANCELLED;
+        $transfer->notes = $this->appendReason($transfer->notes, 'Cancelled', $reason);
+        $transfer->save();
+        $this->analyticsCacheService->invalidate();
+        $this->auditLogService->log('inventory', 'stock_transfer.cancel', 'Transfer stok dibatalkan', $transfer, [
+            'status' => $transfer->status,
+            'reason' => $reason,
+        ]);
+
+        return $transfer;
+    }
+
+    public function receive(StockTransfer $transfer, array $items, ?string $notes = null): StockTransfer
+    {
+        if (! $transfer->canBeReceived()) {
+            throw new DomainException('Transfer stok ini belum siap diterima.');
+        }
+
+        $transfer->loadMissing('items.product');
+
+        return DB::transaction(function () use ($transfer, $items, $notes): StockTransfer {
+            $this->periodLockService->assertDateIsOpen(now('Asia/Jakarta'), 'Penerimaan transfer stok');
+            $postedAny = false;
+            $mappedItems = collect($items)->keyBy('stock_transfer_item_id');
+
+            foreach ($transfer->items as $transferItem) {
+                $payload = $mappedItems->get($transferItem->id);
+                $receivedQuantity = (float) ($payload['received_quantity'] ?? 0);
+                $outstanding = max((float) $transferItem->requested_quantity - (float) $transferItem->received_quantity, 0);
+
+                if ($receivedQuantity <= 0) {
+                    continue;
+                }
+
+                if ($receivedQuantity - $outstanding > 0.0001) {
+                    throw new DomainException('Qty terima transfer melebihi outstanding item.');
+                }
+
+                $this->stockService->post(
+                    (int) $transferItem->product_id,
+                    (int) $transfer->source_warehouse_id,
+                    'transfer_out',
+                    'stock_transfer',
+                    (int) $transfer->id,
+                    -1 * $receivedQuantity,
+                    (float) $transferItem->unit_cost,
+                    'Transfer out ' . $transfer->transfer_number,
+                    Carbon::now(),
+                    null,
+                    $transferItem->product_variant_id ? (int) $transferItem->product_variant_id : null,
+                );
+
+                $this->stockService->post(
+                    (int) $transferItem->product_id,
+                    (int) $transfer->destination_warehouse_id,
+                    'transfer_in',
+                    'stock_transfer',
+                    (int) $transfer->id,
+                    $receivedQuantity,
+                    (float) $transferItem->unit_cost,
+                    'Transfer in ' . $transfer->transfer_number,
+                    Carbon::now(),
+                    null,
+                    $transferItem->product_variant_id ? (int) $transferItem->product_variant_id : null,
+                );
+
+                $transferItem->received_quantity = (float) $transferItem->received_quantity + $receivedQuantity;
+                $transferItem->save();
+                $postedAny = true;
+            }
+
+            if (! $postedAny) {
+                throw new DomainException('Masukkan minimal satu qty terima untuk menyelesaikan transfer stok.');
+            }
+
+            $transfer->notes = $notes ? $this->appendReason($transfer->notes, 'Receiving', $notes) : $transfer->notes;
+
+            if ($transfer->items->every(fn ($item): bool => (float) $item->received_quantity >= (float) $item->requested_quantity)) {
+                $transfer->status = StockTransfer::STATUS_RECEIVED;
+                $transfer->received_at = Carbon::now();
+                $transfer->received_by = $this->actorId();
+            }
+
+            $transfer->save();
+            $this->analyticsCacheService->invalidate();
+            $this->auditLogService->log('inventory', 'stock_transfer.receive', 'Transfer stok diterima', $transfer, [
+                'status' => $transfer->status,
+                'transfer_number' => $transfer->transfer_number,
+            ]);
+
+            return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product', 'items.productVariant']);
+        });
+    }
+
+    private function syncItems(StockTransfer $transfer, array $items): void
+    {
+        $transfer->items()->delete();
+
+        $normalizedItems = collect($items)->map(function (array $item): array {
+            if (isset($item['product_variant_id'])) {
+                $variant = ProductVariant::query()->with('product')->findOrFail((int) $item['product_variant_id']);
+                $product = $variant->product;
+                if (! $product instanceof Product) {
+                    throw new DomainException('Variant produk tidak memiliki master produk yang valid.');
+                }
+                if (isset($item['product_id']) && (int) $item['product_id'] !== (int) $product->id) {
+                    throw new DomainException('Kombinasi product_id dan product_variant_id pada transfer stok tidak valid.');
+                }
+            } else {
+                $product = Product::query()->findOrFail((int) $item['product_id']);
+                $variant = $this->stockService->resolveProductVariant((int) $product->id);
+            }
+
+            $requestedQuantity = (float) $item['requested_quantity'];
+            $unitCost = (float) ($variant->cost_price ?? $product->cost_price);
+
+            return [
+                'product_id' => $product->id,
+                'product_variant_id' => $variant?->id,
+                'requested_quantity' => $requestedQuantity,
+                'received_quantity' => 0,
+                'unit_cost' => $unitCost,
+                'line_total' => $requestedQuantity * $unitCost,
+                'notes' => $item['notes'] ?? null,
+            ];
+        });
+
+        $transfer->items()->createMany($normalizedItems->all());
+        $transfer->load('items');
+        $transfer->recalculateTotals($transfer->items);
+        $transfer->save();
+    }
+
+    private function applyIntent(StockTransfer $transfer, string $intent): void
+    {
+        if ($intent === 'submit') {
+            $transfer->status = StockTransfer::STATUS_PENDING_APPROVAL;
+            $transfer->submitted_at = $transfer->submitted_at ?? Carbon::now();
+            $transfer->approved_at = null;
+            $transfer->approved_by = null;
+
+            return;
+        }
+
+        $transfer->status = StockTransfer::STATUS_DRAFT;
+        $transfer->submitted_at = null;
+        $transfer->approved_at = null;
+        $transfer->approved_by = null;
+    }
+
+    private function generateNumber(): string
+    {
+        $prefix = 'ST-' . Carbon::now('Asia/Jakarta')->format('ym');
+        $latest = StockTransfer::query()
+            ->where('transfer_number', 'like', $prefix . '-%')
+            ->orderByDesc('transfer_number')
+            ->value('transfer_number');
+
+        $lastSequence = $latest ? (int) substr($latest, -3) : 0;
+
+        return sprintf('%s-%03d', $prefix, $lastSequence + 1);
+    }
+
+    private function actorId(): int
+    {
+        return (int) User::query()->firstOrCreate(
+            ['email' => 'system.inventory@webstellar.local'],
+            ['name' => 'System Inventory', 'password' => 'password']
+        )->id;
+    }
+
+    private function appendReason(?string $existing, string $label, ?string $reason): string
+    {
+        $detail = trim((string) $reason);
+        $line = '[' . $label . '] ' . ($detail !== '' ? $detail : 'Aksi dilakukan dari workflow transfer stok.');
+
+        return trim(trim((string) $existing) . PHP_EOL . $line);
+    }
+}

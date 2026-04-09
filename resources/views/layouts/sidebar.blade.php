@@ -1,7 +1,7 @@
 @php
     use App\Helpers\MenuHelper;
 
-    $menuGroups = MenuHelper::getMenuGroups();
+    $menuGroups = MenuHelper::getVisibleMenuGroups();
     $initialOpenSubmenus = [];
 
     foreach ($menuGroups as $groupIndex => $menuGroup) {

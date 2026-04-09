@@ -11,7 +11,13 @@ class Role extends Model
     use HasFactory;
 
     public const OWNER = 'owner';
+    public const MANAGER = 'manager';
+    public const HRD = 'hrd';
+    public const SUPER_ADMIN = 'super_admin';
+    public const ADMIN = 'admin';
+    public const STAFF_ADMIN = 'staff_admin';
     public const CASHIER = 'cashier';
+    public const STAFF_OUTLET = 'staff_outlet';
     public const WAREHOUSE_MANAGER = 'warehouse_manager';
     public const FINANCE = 'finance';
 

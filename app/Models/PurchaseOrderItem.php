@@ -14,6 +14,7 @@ class PurchaseOrderItem extends Model
     protected $fillable = [
         'purchase_order_id',
         'product_id',
+        'product_variant_id',
         'ordered_quantity',
         'received_quantity',
         'unit_cost',
@@ -25,6 +26,7 @@ class PurchaseOrderItem extends Model
     protected function casts(): array
     {
         return [
+            'product_variant_id' => 'integer',
             'ordered_quantity' => 'decimal:2',
             'received_quantity' => 'decimal:2',
             'unit_cost' => 'decimal:2',
@@ -41,6 +43,11 @@ class PurchaseOrderItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
     }
 
     public function goodsReceiptItems(): HasMany

@@ -66,6 +66,54 @@ class Product extends Model
                 $product->slug = Str::slug($product->name . '-' . $product->sku);
             }
         });
+
+        static::created(function (self $product): void {
+            $product->variants()->firstOrCreate(
+                ['is_default' => true],
+                [
+                    'tenant_id' => $product->tenant_id,
+                    'sku' => $product->sku,
+                    'barcode' => $product->barcode,
+                    'variant_name' => 'Default',
+                    'size' => null,
+                    'color' => null,
+                    'attributes' => null,
+                    'unit_of_measure' => $product->unit_of_measure,
+                    'cost_price' => $product->cost_price,
+                    'selling_price' => $product->selling_price,
+                    'reorder_level' => $product->reorder_level,
+                    'reorder_quantity' => $product->reorder_quantity,
+                    'status' => in_array($product->status, [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_DISCONTINUED], true)
+                        ? $product->status
+                        : self::STATUS_ACTIVE,
+                ],
+            );
+        });
+
+        static::updated(function (self $product): void {
+            $defaultVariant = $product->defaultVariant;
+            if ($defaultVariant === null) {
+                return;
+            }
+
+            if ($defaultVariant->variant_name !== 'Default') {
+                return;
+            }
+
+            $defaultVariant->forceFill([
+                'tenant_id' => $product->tenant_id,
+                'sku' => $product->sku,
+                'barcode' => $product->barcode,
+                'unit_of_measure' => $product->unit_of_measure,
+                'cost_price' => $product->cost_price,
+                'selling_price' => $product->selling_price,
+                'reorder_level' => $product->reorder_level,
+                'reorder_quantity' => $product->reorder_quantity,
+                'status' => in_array($product->status, [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_DISCONTINUED], true)
+                    ? $product->status
+                    : self::STATUS_ACTIVE,
+            ])->save();
+        });
     }
 
     public function category(): BelongsTo

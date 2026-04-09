@@ -4,8 +4,10 @@ namespace Database\Seeders;
 
 use App\Models\AttendanceLog;
 use App\Models\Employee;
+use App\Models\Location;
 use App\Models\PayrollRun;
 use App\Models\SalesTransaction;
+use App\Models\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
@@ -13,9 +15,15 @@ class PayrollSeeder extends Seeder
 {
     public function run(): void
     {
+        $tenantId = Tenant::query()->where('code', 'default')->value('id');
+        $fallbackLocationId = Location::query()->withoutTenantLocation()->where('type', Location::TYPE_OUTLET)->orderBy('id')->value('id')
+            ?? Location::query()->withoutTenantLocation()->where('type', Location::TYPE_WAREHOUSE)->orderBy('id')->value('id');
+
         $payrollRun = PayrollRun::query()->updateOrCreate(
             ['code' => 'PAY-2026-03'],
             [
+                'tenant_id' => $tenantId,
+                'location_id' => $fallbackLocationId,
                 'period_start' => '2026-03-01',
                 'period_end' => '2026-03-31',
                 'status' => PayrollRun::STATUS_APPROVED,

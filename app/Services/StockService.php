@@ -35,6 +35,14 @@ class StockService
             ->sum('quantity');
     }
 
+    public function currentVariantBalance(int $productVariantId, int $warehouseId): float
+    {
+        return (float) InventoryLedger::query()
+            ->where('product_variant_id', $productVariantId)
+            ->where('warehouse_id', $warehouseId)
+            ->sum('quantity');
+    }
+
     public function currentLocationBalance(int $productVariantId, int $locationId): float
     {
         return (float) StockMutation::query()
@@ -82,9 +90,11 @@ class StockService
         ?string $notes = null,
         CarbonInterface|string|null $transactionAt = null,
         ?string $transferStatus = null,
+        ?int $productVariantId = null,
     ): InventoryLedger {
         $this->periodLockService->assertDateIsOpen($transactionAt ?? now(), 'Posting stok ' . $movementType);
 
+        $variant = $this->resolveProductVariant($productId, $productVariantId);
         $balanceBefore = $this->currentBalance($productId, $warehouseId);
         $balanceAfter = $balanceBefore + $quantity;
         $locationId = $this->warehouseLocationId($warehouseId);
@@ -96,6 +106,7 @@ class StockService
             'tenant_id' => $tenantId,
             'location_id' => $locationId,
             'product_id' => $productId,
+            'product_variant_id' => (int) $variant->id,
             'warehouse_id' => $warehouseId,
             'movement_type' => $movementType,
             'reference_type' => $referenceType,
@@ -119,6 +130,7 @@ class StockService
             occurredAt: $transactionAt,
             transferStatus: $transferStatus,
             tenantId: $tenantId,
+            productVariantId: (int) $variant->id,
         );
 
         return $ledger;
@@ -136,19 +148,19 @@ class StockService
         CarbonInterface|string|null $occurredAt,
         ?string $transferStatus,
         ?int $tenantId,
+        int $productVariantId,
     ): void {
-        $variant = $this->defaultVariant($productId);
         $locationId = $this->warehouseLocationId($warehouseId);
 
-        if ($variant === null || $locationId === null) {
+        if ($locationId === null) {
             return;
         }
 
-        $balanceBefore = $this->currentLocationBalance((int) $variant->id, (int) $locationId);
+        $balanceBefore = $this->currentLocationBalance($productVariantId, (int) $locationId);
         $status = $transferStatus ?? $this->defaultTransferStatus($movementType);
 
         StockMutation::query()->create([
-            'product_variant_id' => (int) $variant->id,
+            'product_variant_id' => $productVariantId,
             'location_id' => (int) $locationId,
             'mutation_type' => $this->mapMutationType($movementType, $quantity),
             'transfer_status' => $status,
@@ -191,6 +203,53 @@ class StockService
         }
 
         return $this->warehouseLocationCache[$warehouseId];
+    }
+
+    public function resolveProductVariant(int $productId, ?int $productVariantId = null): ProductVariant
+    {
+        if ($productVariantId !== null) {
+            $variant = ProductVariant::query()
+                ->whereKey($productVariantId)
+                ->where('product_id', $productId)
+                ->first();
+
+            if ($variant !== null) {
+                return $variant;
+            }
+        }
+
+        $default = $this->defaultVariant($productId);
+        if ($default !== null) {
+            return $default;
+        }
+
+        $product = Product::query()->findOrFail($productId);
+
+        $created = ProductVariant::query()->updateOrCreate(
+            [
+                'product_id' => $product->id,
+                'is_default' => true,
+            ],
+            [
+                'tenant_id' => $product->tenant_id,
+                'sku' => $product->sku,
+                'barcode' => $product->barcode,
+                'variant_name' => 'Default',
+                'size' => null,
+                'color' => null,
+                'attributes' => null,
+                'unit_of_measure' => $product->unit_of_measure,
+                'cost_price' => $product->cost_price,
+                'selling_price' => $product->selling_price,
+                'reorder_level' => $product->reorder_level,
+                'reorder_quantity' => $product->reorder_quantity,
+                'status' => in_array($product->status, ['active', 'inactive', 'discontinued'], true) ? $product->status : 'active',
+            ],
+        );
+
+        $this->defaultVariantCache[$productId] = $created;
+
+        return $created;
     }
 
     private function defaultVariant(int $productId): ?ProductVariant

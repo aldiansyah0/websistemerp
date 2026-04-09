@@ -29,6 +29,7 @@ use App\Models\EmployeeShiftAssignment;
 use App\Models\StockOpname;
 use App\Models\StockTransfer;
 use App\Models\Supplier;
+use App\Models\User;
 use App\Models\Warehouse;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -611,8 +612,14 @@ class RetailOperationsService
         if ($user !== null && Schema::hasColumn('inventory_ledgers', 'tenant_id') && filled($user->tenant_id)) {
             $query->where('inventory_ledgers.tenant_id', (int) $user->tenant_id);
         }
-        if ($user !== null && Schema::hasColumn('inventory_ledgers', 'location_id') && filled($user->location_id)) {
-            $query->where('inventory_ledgers.location_id', (int) $user->location_id);
+        if ($user instanceof User && Schema::hasColumn('inventory_ledgers', 'location_id') && $user->shouldConstrainLocation()) {
+            $locationIds = $user->scopedLocationIds();
+
+            if ($locationIds === []) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('inventory_ledgers.location_id', $locationIds);
+            }
         }
 
         return $query

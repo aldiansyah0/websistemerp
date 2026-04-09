@@ -7,6 +7,7 @@ use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -62,7 +63,7 @@ class PurchaseReturnService
                 'total_amount' => (float) $purchaseReturn->total_amount,
             ]);
 
-            return $purchaseReturn->fresh(['supplier', 'warehouse', 'purchaseOrder', 'items.product']);
+            return $purchaseReturn->fresh(['supplier', 'warehouse', 'purchaseOrder', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -124,6 +125,8 @@ class PurchaseReturnService
                     unitCost: (float) $item->unit_cost,
                     notes: 'Retur pembelian ' . $purchaseReturn->return_number,
                     transactionAt: Carbon::parse($purchaseReturn->return_date)->endOfDay(),
+                    transferStatus: null,
+                    productVariantId: $item->product_variant_id ? (int) $item->product_variant_id : null,
                 );
 
                 $totalAmount += (float) $item->line_total;
@@ -151,7 +154,7 @@ class PurchaseReturnService
                 'total_amount' => $totalAmount,
             ]);
 
-            return $purchaseReturn->fresh(['supplier', 'warehouse', 'purchaseOrder', 'items.product']);
+            return $purchaseReturn->fresh(['supplier', 'warehouse', 'purchaseOrder', 'items.product', 'items.productVariant']);
         });
     }
 
@@ -187,14 +190,25 @@ class PurchaseReturnService
 
                 $purchaseOrderItem = null;
                 $product = null;
+                $variant = null;
                 $unitCost = (float) ($item['unit_cost'] ?? 0);
 
                 if (isset($item['purchase_order_item_id'])) {
                     $purchaseOrderItem = PurchaseOrderItem::query()->findOrFail($item['purchase_order_item_id']);
                     $product = $purchaseOrderItem->product;
+                    if ($purchaseOrderItem->product_variant_id !== null) {
+                        $variant = ProductVariant::query()->find($purchaseOrderItem->product_variant_id);
+                    }
                     $unitCost = (float) ($item['unit_cost'] ?? $purchaseOrderItem->unit_cost);
+                } elseif (isset($item['product_variant_id'])) {
+                    $variant = ProductVariant::query()->with('product')->findOrFail((int) $item['product_variant_id']);
+                    $product = $variant->product;
+                    if (isset($item['product_id']) && $product !== null && (int) $item['product_id'] !== (int) $product->id) {
+                        throw new DomainException('Kombinasi product_id dan product_variant_id pada retur pembelian tidak valid.');
+                    }
                 } elseif (isset($item['product_id'])) {
-                    $product = Product::query()->findOrFail($item['product_id']);
+                    $product = Product::query()->findOrFail((int) $item['product_id']);
+                    $variant = $this->stockService->resolveProductVariant((int) $product->id);
                 }
 
                 if ($purchaseOrder !== null && $purchaseOrderItem !== null && $purchaseOrderItem->purchase_order_id !== $purchaseOrder->id) {
@@ -215,6 +229,7 @@ class PurchaseReturnService
                 return [
                     'purchase_order_item_id' => $purchaseOrderItem?->id,
                     'product_id' => $product->id,
+                    'product_variant_id' => $variant?->id,
                     'quantity' => $quantity,
                     'unit_cost' => $unitCost,
                     'line_total' => max($quantity * $unitCost, 0),
@@ -295,4 +310,3 @@ class PurchaseReturnService
         return trim(trim((string) $existing) . PHP_EOL . $line);
     }
 }
-

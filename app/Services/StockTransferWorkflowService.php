@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Product;
 use App\Models\StockTransfer;
 use App\Models\User;
-use App\Models\Warehouse;
 use Carbon\Carbon;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -13,20 +12,14 @@ use Illuminate\Support\Facades\DB;
 class StockTransferWorkflowService
 {
     public function __construct(
-        private readonly StockService $stockService,
-        private readonly AnalyticsCacheService $analyticsCacheService,
-        private readonly PeriodLockService $periodLockService,
-        private readonly AuditLogService $auditLogService,
+        private readonly InventoryPostingService $inventoryPostingService,
     ) {
     }
 
     public function store(array $attributes, array $items, string $intent = 'draft'): StockTransfer
     {
         return DB::transaction(function () use ($attributes, $items, $intent): StockTransfer {
-            $sourceWarehouse = Warehouse::query()->findOrFail($attributes['source_warehouse_id']);
             $transfer = new StockTransfer($attributes);
-            $transfer->tenant_id = $sourceWarehouse->tenant_id;
-            $transfer->location_id = $sourceWarehouse->location_id;
             $transfer->transfer_number = $this->generateNumber();
             $transfer->requested_by = $this->actorId();
 
@@ -34,13 +27,6 @@ class StockTransferWorkflowService
             $transfer->save();
 
             $this->syncItems($transfer, $items);
-            $this->analyticsCacheService->invalidate();
-            $this->auditLogService->log('inventory', 'stock_transfer.store', 'Transfer stok dibuat', $transfer, [
-                'status' => $transfer->status,
-                'source_warehouse_id' => $transfer->source_warehouse_id,
-                'destination_warehouse_id' => $transfer->destination_warehouse_id,
-                'total_quantity' => (float) $transfer->total_quantity,
-            ]);
 
             return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product']);
         });
@@ -53,19 +39,11 @@ class StockTransferWorkflowService
         }
 
         return DB::transaction(function () use ($transfer, $attributes, $items, $intent): StockTransfer {
-            $sourceWarehouse = Warehouse::query()->findOrFail($attributes['source_warehouse_id']);
             $transfer->fill($attributes);
-            $transfer->tenant_id = $sourceWarehouse->tenant_id;
-            $transfer->location_id = $sourceWarehouse->location_id;
             $this->applyIntent($transfer, $intent);
             $transfer->save();
 
             $this->syncItems($transfer, $items);
-            $this->analyticsCacheService->invalidate();
-            $this->auditLogService->log('inventory', 'stock_transfer.update', 'Transfer stok diperbarui', $transfer, [
-                'status' => $transfer->status,
-                'total_quantity' => (float) $transfer->total_quantity,
-            ]);
 
             return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product']);
         });
@@ -82,10 +60,6 @@ class StockTransferWorkflowService
         $transfer->approved_at = null;
         $transfer->approved_by = null;
         $transfer->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('inventory', 'stock_transfer.submit', 'Transfer stok dikirim ke approval', $transfer, [
-            'status' => $transfer->status,
-        ]);
 
         return $transfer;
     }
@@ -100,10 +74,6 @@ class StockTransferWorkflowService
         $transfer->approved_at = Carbon::now();
         $transfer->approved_by = $this->actorId();
         $transfer->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('inventory', 'stock_transfer.approve', 'Transfer stok disetujui', $transfer, [
-            'status' => $transfer->status,
-        ]);
 
         return $transfer;
     }
@@ -119,11 +89,6 @@ class StockTransferWorkflowService
         $transfer->approved_by = null;
         $transfer->notes = $this->appendReason($transfer->notes, 'Rejected', $reason);
         $transfer->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('inventory', 'stock_transfer.reject', 'Transfer stok ditolak', $transfer, [
-            'status' => $transfer->status,
-            'reason' => $reason,
-        ]);
 
         return $transfer;
     }
@@ -137,11 +102,6 @@ class StockTransferWorkflowService
         $transfer->status = StockTransfer::STATUS_CANCELLED;
         $transfer->notes = $this->appendReason($transfer->notes, 'Cancelled', $reason);
         $transfer->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('inventory', 'stock_transfer.cancel', 'Transfer stok dibatalkan', $transfer, [
-            'status' => $transfer->status,
-            'reason' => $reason,
-        ]);
 
         return $transfer;
     }
@@ -155,7 +115,6 @@ class StockTransferWorkflowService
         $transfer->loadMissing('items.product');
 
         return DB::transaction(function () use ($transfer, $items, $notes): StockTransfer {
-            $this->periodLockService->assertDateIsOpen(now('Asia/Jakarta'), 'Penerimaan transfer stok');
             $postedAny = false;
             $mappedItems = collect($items)->keyBy('stock_transfer_item_id');
 
@@ -172,7 +131,7 @@ class StockTransferWorkflowService
                     throw new DomainException('Qty terima transfer melebihi outstanding item.');
                 }
 
-                $this->stockService->post(
+                $this->inventoryPostingService->post(
                     (int) $transferItem->product_id,
                     (int) $transfer->source_warehouse_id,
                     'transfer_out',
@@ -184,7 +143,7 @@ class StockTransferWorkflowService
                     Carbon::now(),
                 );
 
-                $this->stockService->post(
+                $this->inventoryPostingService->post(
                     (int) $transferItem->product_id,
                     (int) $transfer->destination_warehouse_id,
                     'transfer_in',
@@ -214,11 +173,6 @@ class StockTransferWorkflowService
             }
 
             $transfer->save();
-            $this->analyticsCacheService->invalidate();
-            $this->auditLogService->log('inventory', 'stock_transfer.receive', 'Transfer stok diterima', $transfer, [
-                'status' => $transfer->status,
-                'transfer_number' => $transfer->transfer_number,
-            ]);
 
             return $transfer->fresh(['sourceWarehouse', 'destinationWarehouse', 'items.product']);
         });

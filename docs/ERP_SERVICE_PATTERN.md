@@ -2,6 +2,7 @@
 
 ## 1. Prinsip Arsitektur
 - Controller/Livewire hanya untuk request-response.
+- Gunakan alur berlapis: `Controller/Livewire -> Workflow -> Service -> Model`.
 - Semua logika bisnis berat ditempatkan di `app/Services`.
 - Gunakan transaksi database (`DB::transaction`) untuk workflow lintas tabel.
 
@@ -12,7 +13,7 @@
   - validasi minimum stock (`validateMinimumStock`)
   - posting mutasi stok ke `inventory_ledgers` + mirror ke `stock_mutations`
 - Cara pakai:
-  - injeksikan `StockService` ke service workflow (`SalesTransactionService`, `GoodsReceiptWorkflowService`, `StockTransferWorkflowService`)
+  - injeksikan `StockService` ke service domain (`SalesTransactionService`, `GoodsReceiptService`, `StockTransferService`)
   - jangan panggil query ledger langsung dari controller.
 
 ## 2A. POS Barcode-Centric + Atomic

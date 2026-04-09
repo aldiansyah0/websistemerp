@@ -12,7 +12,7 @@ use App\Models\SalesTransaction;
 use App\Models\StockTransfer;
 use App\Models\User;
 use App\Models\Warehouse;
-use App\Services\SalesTransactionService;
+use App\Workflows\PosTransactionWorkflow;
 use Carbon\CarbonImmutable;
 
 beforeEach(function (): void {
@@ -166,10 +166,10 @@ test('retail daily cycle keeps posting atomic from pos to period closing', funct
     expect($closedPeriod->status)->toBe(AccountingPeriod::STATUS_CLOSED);
 
     $salesCountBeforeBlockedPost = SalesTransaction::query()->withoutTenantLocation()->count();
-    $salesTransactionService = app(SalesTransactionService::class);
+    $salesTransactionWorkflow = app(PosTransactionWorkflow::class);
 
-    expect(function () use ($salesTransactionService, $outlet, $cashier, $soldAt, $product, $paymentMethod): void {
-        $salesTransactionService->store(
+    expect(function () use ($salesTransactionWorkflow, $outlet, $cashier, $soldAt, $product, $paymentMethod): void {
+        $salesTransactionWorkflow->store(
             attributes: [
                 'outlet_id' => $outlet->id,
                 'cashier_employee_id' => $cashier?->id,

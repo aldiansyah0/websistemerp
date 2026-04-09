@@ -12,10 +12,7 @@ use Illuminate\Support\Facades\DB;
 class GoodsReceiptWorkflowService
 {
     public function __construct(
-        private readonly StockService $stockService,
-        private readonly AnalyticsCacheService $analyticsCacheService,
-        private readonly PeriodLockService $periodLockService,
-        private readonly AuditLogService $auditLogService,
+        private readonly InventoryPostingService $inventoryPostingService,
     ) {
     }
 
@@ -29,11 +26,8 @@ class GoodsReceiptWorkflowService
 
         return DB::transaction(function () use ($purchaseOrder, $attributes, $items): GoodsReceipt {
             $receivedAt = isset($attributes['received_at']) ? Carbon::parse($attributes['received_at']) : Carbon::now();
-            $this->periodLockService->assertDateIsOpen($receivedAt, 'Posting penerimaan barang');
             $goodsReceipt = new GoodsReceipt([
                 'receipt_number' => $this->generateNumber(),
-                'tenant_id' => $purchaseOrder->tenant_id,
-                'location_id' => $purchaseOrder->location_id,
                 'purchase_order_id' => $purchaseOrder->id,
                 'warehouse_id' => $purchaseOrder->warehouse_id,
                 'received_by' => $this->actorId(),
@@ -67,10 +61,10 @@ class GoodsReceiptWorkflowService
                     'notes' => $payload['notes'] ?? null,
                 ]);
 
-                $this->stockService->post(
+                $this->inventoryPostingService->post(
                     (int) $purchaseOrderItem->product_id,
                     (int) $purchaseOrder->warehouse_id,
-                    'purchase',
+                    'purchase_receipt',
                     'goods_receipt',
                     (int) $goodsReceipt->id,
                     $receivedQuantity,
@@ -99,12 +93,6 @@ class GoodsReceiptWorkflowService
             $purchaseOrder->status = $allReceived ? PurchaseOrder::STATUS_RECEIVED : PurchaseOrder::STATUS_PARTIALLY_RECEIVED;
             $purchaseOrder->received_at = $allReceived ? $receivedAt : null;
             $purchaseOrder->save();
-            $this->analyticsCacheService->invalidate();
-            $this->auditLogService->log('procurement', 'goods_receipt.post', 'Penerimaan barang diposting', $goodsReceipt, [
-                'po_number' => $purchaseOrder->po_number,
-                'receipt_number' => $goodsReceipt->receipt_number,
-                'total_received_qty' => (float) $goodsReceipt->total_quantity,
-            ]);
 
             return $goodsReceipt->fresh(['purchaseOrder', 'warehouse', 'items.product']);
         });

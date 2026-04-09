@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\PurchaseOrder;
-use App\Models\Warehouse;
 use App\Models\User;
 use DomainException;
 use Illuminate\Support\Carbon;
@@ -12,38 +11,17 @@ use Illuminate\Support\Facades\DB;
 
 class PurchaseOrderWorkflowService
 {
-    public function __construct(
-        private readonly AnalyticsCacheService $analyticsCacheService,
-        private readonly PeriodLockService $periodLockService,
-        private readonly AuditLogService $auditLogService,
-    ) {
-    }
-
     public function store(array $attributes, array $items, string $intent = 'draft'): PurchaseOrder
     {
         return DB::transaction(function () use ($attributes, $items, $intent): PurchaseOrder {
-            $warehouse = Warehouse::query()->findOrFail($attributes['warehouse_id']);
-            $orderDate = $attributes['order_date'] ?? now('Asia/Jakarta')->toDateString();
-            $this->periodLockService->assertDateIsOpen($orderDate, 'Posting purchase order');
             $purchaseOrder = new PurchaseOrder($attributes);
-            $purchaseOrder->tenant_id = $warehouse->tenant_id;
-            $purchaseOrder->location_id = $warehouse->location_id;
             $purchaseOrder->po_number = $this->generateNumber();
             $purchaseOrder->created_by = $this->actorId();
-            $purchaseOrder->paid_amount = 0;
-            $purchaseOrder->payment_status = 'unpaid';
 
             $this->applyIntent($purchaseOrder, $intent);
             $purchaseOrder->save();
 
             $this->syncItems($purchaseOrder, $items);
-            $this->analyticsCacheService->invalidate();
-            $this->auditLogService->log('procurement', 'purchase_order.store', 'Purchase order dibuat', $purchaseOrder, [
-                'status' => $purchaseOrder->status,
-                'warehouse_id' => $purchaseOrder->warehouse_id,
-                'supplier_id' => $purchaseOrder->supplier_id,
-                'total_amount' => (float) $purchaseOrder->total_amount,
-            ]);
 
             return $purchaseOrder->fresh(['supplier', 'warehouse', 'items.product']);
         });
@@ -56,21 +34,11 @@ class PurchaseOrderWorkflowService
         }
 
         return DB::transaction(function () use ($purchaseOrder, $attributes, $items, $intent): PurchaseOrder {
-            $warehouse = Warehouse::query()->findOrFail($attributes['warehouse_id']);
-            $orderDate = $attributes['order_date'] ?? $purchaseOrder->order_date;
-            $this->periodLockService->assertDateIsOpen($orderDate, 'Update purchase order');
             $purchaseOrder->fill($attributes);
-            $purchaseOrder->tenant_id = $warehouse->tenant_id;
-            $purchaseOrder->location_id = $warehouse->location_id;
             $this->applyIntent($purchaseOrder, $intent);
             $purchaseOrder->save();
 
             $this->syncItems($purchaseOrder, $items);
-            $this->analyticsCacheService->invalidate();
-            $this->auditLogService->log('procurement', 'purchase_order.update', 'Purchase order diperbarui', $purchaseOrder, [
-                'status' => $purchaseOrder->status,
-                'total_amount' => (float) $purchaseOrder->total_amount,
-            ]);
 
             return $purchaseOrder->fresh(['supplier', 'warehouse', 'items.product']);
         });
@@ -87,10 +55,6 @@ class PurchaseOrderWorkflowService
         $purchaseOrder->approved_at = null;
         $purchaseOrder->approved_by = null;
         $purchaseOrder->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('procurement', 'purchase_order.submit', 'Purchase order dikirim ke approval', $purchaseOrder, [
-            'status' => $purchaseOrder->status,
-        ]);
 
         return $purchaseOrder;
     }
@@ -105,10 +69,6 @@ class PurchaseOrderWorkflowService
         $purchaseOrder->approved_at = Carbon::now();
         $purchaseOrder->approved_by = $this->actorId();
         $purchaseOrder->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('procurement', 'purchase_order.approve', 'Purchase order disetujui', $purchaseOrder, [
-            'status' => $purchaseOrder->status,
-        ]);
 
         return $purchaseOrder;
     }
@@ -124,11 +84,6 @@ class PurchaseOrderWorkflowService
         $purchaseOrder->approved_by = null;
         $purchaseOrder->notes = $this->appendReason($purchaseOrder->notes, 'Rejected', $reason);
         $purchaseOrder->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('procurement', 'purchase_order.reject', 'Purchase order ditolak', $purchaseOrder, [
-            'status' => $purchaseOrder->status,
-            'reason' => $reason,
-        ]);
 
         return $purchaseOrder;
     }
@@ -142,11 +97,6 @@ class PurchaseOrderWorkflowService
         $purchaseOrder->status = PurchaseOrder::STATUS_CANCELLED;
         $purchaseOrder->notes = $this->appendReason($purchaseOrder->notes, 'Cancelled', $reason);
         $purchaseOrder->save();
-        $this->analyticsCacheService->invalidate();
-        $this->auditLogService->log('procurement', 'purchase_order.cancel', 'Purchase order dibatalkan', $purchaseOrder, [
-            'status' => $purchaseOrder->status,
-            'reason' => $reason,
-        ]);
 
         return $purchaseOrder;
     }
@@ -174,13 +124,6 @@ class PurchaseOrderWorkflowService
         $purchaseOrder->items()->createMany($normalizedItems->all());
         $purchaseOrder->load('items');
         $purchaseOrder->recalculateTotals($purchaseOrder->items);
-        $purchaseOrder->due_date = $purchaseOrder->due_date ?? $purchaseOrder->expected_date ?? $purchaseOrder->order_date;
-        $purchaseOrder->balance_due = max((float) $purchaseOrder->total_amount - (float) $purchaseOrder->paid_amount, 0);
-        $purchaseOrder->payment_status = match (true) {
-            (float) $purchaseOrder->balance_due <= 0.0001 => 'paid',
-            (float) $purchaseOrder->paid_amount > 0 => 'partial',
-            default => 'unpaid',
-        };
         $purchaseOrder->save();
     }
 

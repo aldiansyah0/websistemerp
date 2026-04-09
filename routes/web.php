@@ -1,6 +1,7 @@
 <?php
 
 use App\Helpers\MenuHelper;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CashReconciliationController;
 use App\Http\Controllers\CustomerController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\FinancialReportExportController;
 use App\Http\Controllers\GoodsReceiptController;
+use App\Http\Controllers\LocationAccessController;
 use App\Http\Controllers\OutletController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PeriodClosingController;
@@ -22,7 +24,24 @@ use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\SupplierController;
 use Illuminate\Support\Facades\Route;
 
+Route::middleware('guest')->group(function (): void {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
+    Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
+    Route::post('/register', [AuthController::class, 'register'])->name('register.store');
+    Route::redirect('/signin', '/login');
+    Route::redirect('/signup', '/register');
+});
+
+Route::post('/logout', [AuthController::class, 'logout'])
+    ->name('logout')
+    ->middleware('auth');
+
+Route::middleware('auth')->group(function (): void {
 Route::get('/', [DashboardController::class, 'dashboard'])->name('dashboard');
+Route::post('/session/active-location', [LocationAccessController::class, 'switchActive'])
+    ->name('active-location.switch')
+    ->middleware('permission:dashboard.view');
 Route::get('/kategori/tambah', [CategoryController::class, 'create'])->name('categories.create')->middleware('permission:master-data.manage');
 Route::post('/kategori', [CategoryController::class, 'store'])->name('categories.store')->middleware('permission:master-data.manage');
 Route::get('/kategori/{category}/edit', [CategoryController::class, 'edit'])->name('categories.edit')->middleware('permission:master-data.manage');
@@ -126,6 +145,35 @@ Route::post('/keuangan/rekonsiliasi-kas-bank/{cashReconciliation}/approve', [Cas
 Route::post('/keuangan/rekonsiliasi-kas-bank/{cashReconciliation}/reject', [CashReconciliationController::class, 'reject'])->name('cash-reconciliations.reject')->middleware('permission:finance.reconciliation.manage');
 
 $workspacePermissionMap = [
+    'warehouse' => 'inventory.transfer.manage',
+    'outlet' => 'master-data.manage',
+    'produk' => 'master-data.manage',
+    'kategori' => 'master-data.manage',
+    'supplier' => 'master-data.manage',
+    'stock-summary' => 'inventory.transfer.manage',
+    'stock-mutation' => 'inventory.transfer.manage',
+    'stock-opname' => 'inventory.opname.manage',
+    'store-warehouse' => 'inventory.transfer.manage',
+    'purchase-return' => 'procurement.return.manage',
+    'purchase-orders' => 'procurement.purchase.manage',
+    'goods-receipts' => 'procurement.purchase.manage',
+    'customer-directory' => 'sales.pos.manage',
+    'pos-transactions' => 'sales.pos.manage',
+    'sales-invoices' => 'sales.pos.manage',
+    'sales-return' => 'sales.return.manage',
+    'employee-management' => 'hr.employee.manage',
+    'attendance-log' => 'hr.shift.manage',
+    'shift-attendance' => 'hr.shift.manage',
+    'schedule-request' => 'hr.shift.manage',
+    'leave-request' => 'hr.shift.manage',
+    'payroll-list' => 'hr.payroll.manage',
+    'resign-data' => 'hr.employee.manage',
+    'financial-report' => 'finance.report.export',
+    'cashflow' => 'finance.report.export',
+    'receivables-payables' => 'finance.reconciliation.manage',
+    'split-payment' => 'finance.reconciliation.manage',
+    'period-closing' => 'finance.period.close',
+    'cash-reconciliation' => 'finance.reconciliation.manage',
     'audit-trail' => 'audit.log.view',
 ];
 
@@ -142,3 +190,4 @@ foreach (MenuHelper::getWorkspacePages() as $page) {
         $route->middleware('permission:' . $workspacePermissionMap[$page['key']]);
     }
 }
+});

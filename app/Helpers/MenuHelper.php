@@ -2,6 +2,10 @@
 
 namespace App\Helpers;
 
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+
 class MenuHelper
 {
     public static function getMenuGroups(): array
@@ -297,6 +301,48 @@ class MenuHelper
         return $pages;
     }
 
+    public static function getVisibleMenuGroups(): array
+    {
+        $groups = [];
+
+        foreach (self::getMenuGroups() as $group) {
+            $items = [];
+
+            foreach ($group['items'] as $item) {
+                $hasSubItems = ! empty($item['subItems'] ?? []);
+
+                if ($hasSubItems) {
+                    $visibleSubItems = array_values(array_filter(
+                        $item['subItems'],
+                        fn (array $subItem): bool => self::canAccessPage($subItem['key'] ?? null)
+                    ));
+
+                    if ($visibleSubItems === []) {
+                        continue;
+                    }
+
+                    $item['subItems'] = $visibleSubItems;
+                    $items[] = $item;
+
+                    continue;
+                }
+
+                if (! self::canAccessPage($item['key'] ?? null)) {
+                    continue;
+                }
+
+                $items[] = $item;
+            }
+
+            if ($items !== []) {
+                $group['items'] = $items;
+                $groups[] = $group;
+            }
+        }
+
+        return $groups;
+    }
+
     public static function findPage(string $key): ?array
     {
         return self::getWorkspacePages()[$key] ?? null;
@@ -355,6 +401,71 @@ class MenuHelper
             'eyebrow' => $eyebrow,
             'description' => $item['description'] ?? 'Halaman ini siap dikembangkan sebagai modul kerja baru di WebStellar ERP.',
             'route_name' => $item['key'],
+        ];
+    }
+
+    private static function canAccessPage(?string $pageKey): bool
+    {
+        if (! filled($pageKey)) {
+            return true;
+        }
+
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if ($user === null) {
+            return app()->environment(['local', 'testing']);
+        }
+
+        if ($user->hasRole([Role::OWNER, Role::SUPER_ADMIN])) {
+            return true;
+        }
+
+        $permission = self::workspacePermissionMap()[$pageKey] ?? null;
+
+        if (! filled($permission)) {
+            return true;
+        }
+
+        return $user->hasPermission((string) $permission);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function workspacePermissionMap(): array
+    {
+        return [
+            'warehouse' => 'inventory.transfer.manage',
+            'outlet' => 'master-data.manage',
+            'produk' => 'master-data.manage',
+            'kategori' => 'master-data.manage',
+            'supplier' => 'master-data.manage',
+            'stock-summary' => 'inventory.transfer.manage',
+            'stock-mutation' => 'inventory.transfer.manage',
+            'stock-opname' => 'inventory.opname.manage',
+            'store-warehouse' => 'inventory.transfer.manage',
+            'purchase-return' => 'procurement.return.manage',
+            'purchase-orders' => 'procurement.purchase.manage',
+            'goods-receipts' => 'procurement.purchase.manage',
+            'customer-directory' => 'sales.pos.manage',
+            'pos-transactions' => 'sales.pos.manage',
+            'sales-invoices' => 'sales.pos.manage',
+            'sales-return' => 'sales.return.manage',
+            'employee-management' => 'hr.employee.manage',
+            'attendance-log' => 'hr.shift.manage',
+            'shift-attendance' => 'hr.shift.manage',
+            'schedule-request' => 'hr.shift.manage',
+            'leave-request' => 'hr.shift.manage',
+            'payroll-list' => 'hr.payroll.manage',
+            'resign-data' => 'hr.employee.manage',
+            'financial-report' => 'finance.report.export',
+            'cashflow' => 'finance.report.export',
+            'receivables-payables' => 'finance.reconciliation.manage',
+            'split-payment' => 'finance.reconciliation.manage',
+            'period-closing' => 'finance.period.close',
+            'cash-reconciliation' => 'finance.reconciliation.manage',
+            'audit-trail' => 'audit.log.view',
         ];
     }
 }

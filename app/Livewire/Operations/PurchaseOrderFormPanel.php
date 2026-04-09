@@ -6,7 +6,7 @@ use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\Warehouse;
-use App\Services\PurchaseOrderWorkflowService;
+use App\Workflows\PurchaseOrderWorkflow;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
@@ -80,12 +80,12 @@ class PurchaseOrderFormPanel extends Component
         }
     }
 
-    public function saveDraft(PurchaseOrderWorkflowService $workflow)
+    public function saveDraft(PurchaseOrderWorkflow $workflow)
     {
         return $this->persist('draft', $workflow);
     }
 
-    public function submitForApproval(PurchaseOrderWorkflowService $workflow)
+    public function submitForApproval(PurchaseOrderWorkflow $workflow)
     {
         return $this->persist('submit', $workflow);
     }
@@ -124,7 +124,7 @@ class PurchaseOrderFormPanel extends Component
         ]);
     }
 
-    private function persist(string $intent, PurchaseOrderWorkflowService $workflow)
+    private function persist(string $intent, PurchaseOrderWorkflow $workflow)
     {
         $this->items = collect($this->items)
             ->map(fn (array $item): array => [

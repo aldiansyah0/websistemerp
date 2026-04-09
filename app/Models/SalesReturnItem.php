@@ -14,6 +14,7 @@ class SalesReturnItem extends Model
         'sales_return_id',
         'sales_transaction_item_id',
         'product_id',
+        'product_variant_id',
         'quantity',
         'unit_price',
         'unit_cost',
@@ -27,6 +28,7 @@ class SalesReturnItem extends Model
         return [
             'sales_transaction_item_id' => 'integer',
             'product_id' => 'integer',
+            'product_variant_id' => 'integer',
             'quantity' => 'decimal:2',
             'unit_price' => 'decimal:2',
             'unit_cost' => 'decimal:2',
@@ -48,5 +50,9 @@ class SalesReturnItem extends Model
     {
         return $this->belongsTo(Product::class);
     }
-}
 
+    public function productVariant(): BelongsTo
+    {
+        return $this->belongsTo(ProductVariant::class);
+    }
+}

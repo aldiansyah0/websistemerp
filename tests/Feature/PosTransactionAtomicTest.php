@@ -7,7 +7,7 @@ use App\Models\Outlet;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\SalesTransaction;
-use App\Services\SalesTransactionService;
+use App\Workflows\PosTransactionWorkflow;
 
 beforeEach(function (): void {
     $this->seed();
@@ -108,13 +108,13 @@ test('pos transaction creates split payments and accounting journal atomically',
 
 test('pos transaction rolls back fully when stock posting fails', function () {
     [$outlet, $product, $paymentMethod, $cashier] = fixturePosContext();
-    $service = app(SalesTransactionService::class);
+    $workflow = app(PosTransactionWorkflow::class);
     $sentinelNotes = 'ATOMIC-ROLLBACK-POS';
     $reference = 'ROLLBACK-REF-001';
     $startingCount = SalesTransaction::query()->count();
 
     try {
-        $service->store(
+        $workflow->store(
             attributes: [
                 'outlet_id' => $outlet->id,
                 'cashier_employee_id' => $cashier?->id,

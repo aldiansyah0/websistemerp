@@ -118,6 +118,37 @@
   --color-error-200: #fecdca;
   --color-error-300: #fda29b;
   --color-error-400: #f97066;
+
+/* Header & accessibility utilities (safe, non-invasive) */
+.header-action {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 9999px;
+}
+
+.header-avatar {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:root { --header-height: 64px; }
+@media (max-width: 640px) {
+  :root { --header-height: 56px; }
+  .brand-text { display: none !important; }
+  .header-avatar { width: 36px; height: 36px; }
+  .header-username { display: none !important; }
+  .active-location-select { min-width: 140px !important; }
+  .notification-dropdown { right: 0 !important; width: calc(100vw - 1rem) !important; max-width: 360px !important; }
+}
+
+main { padding-top: var(--header-height); }
   --color-error-500: #f04438;
   --color-error-600: #d92d20;
   --color-error-700: #b42318;

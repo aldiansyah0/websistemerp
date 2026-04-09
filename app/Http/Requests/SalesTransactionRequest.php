@@ -16,12 +16,13 @@ class SalesTransactionRequest extends FormRequest
         $items = collect($this->input('items', []))
             ->map(fn ($item): array => [
                 'product_id' => $item['product_id'] ?? null,
+                'product_variant_id' => $item['product_variant_id'] ?? null,
                 'quantity' => $item['quantity'] ?? null,
                 'unit_price' => $item['unit_price'] ?? null,
                 'discount_amount' => $item['discount_amount'] ?? 0,
                 'notes' => $item['notes'] ?? null,
             ])
-            ->filter(fn (array $item): bool => filled($item['product_id']) || filled($item['quantity']) || filled($item['unit_price']))
+            ->filter(fn (array $item): bool => filled($item['product_id']) || filled($item['product_variant_id']) || filled($item['quantity']) || filled($item['unit_price']))
             ->values()
             ->all();
 
@@ -60,7 +61,8 @@ class SalesTransactionRequest extends FormRequest
             'due_date' => ['nullable', 'date', 'after_or_equal:sold_at'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'distinct', 'exists:products,id'],
+            'items.*.product_id' => ['nullable', 'exists:products,id'],
+            'items.*.product_variant_id' => ['nullable', 'exists:product_variants,id'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
@@ -76,6 +78,12 @@ class SalesTransactionRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
+            foreach ((array) $this->input('items', []) as $index => $item) {
+                if (blank($item['product_id'] ?? null) && blank($item['product_variant_id'] ?? null)) {
+                    $validator->errors()->add("items.$index.product_id", 'Setiap item wajib memiliki product_id atau product_variant_id.');
+                }
+            }
+
             $items = collect($this->input('items', []));
             $payments = collect($this->input('payments', []));
 

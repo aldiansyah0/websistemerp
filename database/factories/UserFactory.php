@@ -24,6 +24,10 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
+            'tenant_id' => null,
+            'location_id' => null,
+            'active_location_id' => null,
+            'access_scope' => \App\Models\User::ACCESS_SCOPE_SINGLE,
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),

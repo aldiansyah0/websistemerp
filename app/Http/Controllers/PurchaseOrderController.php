@@ -6,8 +6,8 @@ use App\Http\Requests\PurchaseOrderRequest;
 use App\Http\Requests\PurchaseOrderPaymentRequest;
 use App\Models\PurchaseOrder;
 use App\Services\PurchaseOrderPaymentService;
-use App\Services\PurchaseOrderWorkflowService;
 use App\Services\RetailOperationsService;
+use App\Workflows\PurchaseOrderWorkflow;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,7 +23,7 @@ class PurchaseOrderController extends Controller
         ]);
     }
 
-    public function store(PurchaseOrderRequest $request, PurchaseOrderWorkflowService $workflow): RedirectResponse
+    public function store(PurchaseOrderRequest $request, PurchaseOrderWorkflow $workflow): RedirectResponse
     {
         $purchaseOrder = $workflow->store($request->headerData(), $request->lineItems(), $request->intent());
 
@@ -42,7 +42,7 @@ class PurchaseOrderController extends Controller
         ]);
     }
 
-    public function update(PurchaseOrderRequest $request, PurchaseOrder $purchaseOrder, PurchaseOrderWorkflowService $workflow): RedirectResponse
+    public function update(PurchaseOrderRequest $request, PurchaseOrder $purchaseOrder, PurchaseOrderWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->update($purchaseOrder, $request->headerData(), $request->lineItems(), $request->intent());
@@ -53,7 +53,7 @@ class PurchaseOrderController extends Controller
         return redirect()->route('purchase-orders')->with('success', 'Purchase order ' . $purchaseOrder->po_number . ' berhasil diperbarui.');
     }
 
-    public function submit(PurchaseOrder $purchaseOrder, PurchaseOrderWorkflowService $workflow): RedirectResponse
+    public function submit(PurchaseOrder $purchaseOrder, PurchaseOrderWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->submit($purchaseOrder);
@@ -64,7 +64,7 @@ class PurchaseOrderController extends Controller
         return redirect()->route('purchase-orders')->with('success', 'Purchase order ' . $purchaseOrder->po_number . ' berhasil dikirim ke approval.');
     }
 
-    public function approve(PurchaseOrder $purchaseOrder, PurchaseOrderWorkflowService $workflow): RedirectResponse
+    public function approve(PurchaseOrder $purchaseOrder, PurchaseOrderWorkflow $workflow): RedirectResponse
     {
         try {
             $workflow->approve($purchaseOrder);
@@ -75,7 +75,7 @@ class PurchaseOrderController extends Controller
         return redirect()->route('purchase-orders')->with('success', 'Purchase order ' . $purchaseOrder->po_number . ' berhasil di-approve.');
     }
 
-    public function reject(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderWorkflowService $workflow): RedirectResponse
+    public function reject(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderWorkflow $workflow): RedirectResponse
     {
         $payload = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],
@@ -90,7 +90,7 @@ class PurchaseOrderController extends Controller
         return redirect()->route('purchase-orders')->with('success', 'Purchase order ' . $purchaseOrder->po_number . ' ditandai sebagai rejected.');
     }
 
-    public function cancel(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderWorkflowService $workflow): RedirectResponse
+    public function cancel(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderWorkflow $workflow): RedirectResponse
     {
         $payload = $request->validate([
             'reason' => ['nullable', 'string', 'max:500'],

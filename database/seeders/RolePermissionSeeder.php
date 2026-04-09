@@ -2,11 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\Location;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Tenant;
-use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class RolePermissionSeeder extends Seeder
@@ -30,6 +27,8 @@ class RolePermissionSeeder extends Seeder
             ['name' => 'Close Finance Period', 'slug' => 'finance.period.close', 'description' => 'Tutup atau buka periode posting keuangan.'],
             ['name' => 'Manage Cash Reconciliation', 'slug' => 'finance.reconciliation.manage', 'description' => 'Kelola rekonsiliasi kas/bank harian.'],
             ['name' => 'View Audit Trail', 'slug' => 'audit.log.view', 'description' => 'Akses audit trail untuk monitoring approval dan posting kritikal.'],
+            ['name' => 'Manage System Config', 'slug' => 'system.config.manage', 'description' => 'Kelola konfigurasi sistem tingkat lanjut dan parameter global.'],
+            ['name' => 'Manage User Access', 'slug' => 'security.user.manage', 'description' => 'Kelola role, permission, dan assignment akses lokasi user.'],
         ];
 
         foreach ($permissions as $permission) {
@@ -39,48 +38,91 @@ class RolePermissionSeeder extends Seeder
             );
         }
 
-        $ownerRole = Role::query()->updateOrCreate(
-            ['slug' => Role::OWNER],
-            [
-                'name' => 'Owner',
-                'description' => 'Akses penuh seluruh modul ERP.',
-                'is_system' => true,
-            ]
-        );
-        $cashierRole = Role::query()->updateOrCreate(
-            ['slug' => Role::CASHIER],
-            [
-                'name' => 'Cashier',
-                'description' => 'Akses operasional kasir dan POS.',
-                'is_system' => true,
-            ]
-        );
-        $warehouseRole = Role::query()->updateOrCreate(
-            ['slug' => Role::WAREHOUSE_MANAGER],
-            [
-                'name' => 'Warehouse Manager',
-                'description' => 'Akses operasional gudang, transfer, dan procurement.',
-                'is_system' => true,
-            ]
-        );
-        $financeRole = Role::query()->updateOrCreate(
-            ['slug' => Role::FINANCE],
-            [
-                'name' => 'Finance',
-                'description' => 'Akses kontrol keuangan dan persetujuan finansial.',
-                'is_system' => true,
-            ]
-        );
+        $roles = [
+            Role::OWNER => ['name' => 'Owner', 'description' => 'Akses penuh lintas outlet dan seluruh modul ERP.'],
+            Role::MANAGER => ['name' => 'Manager', 'description' => 'Pengawas operasional regional/multi outlet.'],
+            Role::HRD => ['name' => 'HRD', 'description' => 'Kelola karyawan, absensi, payroll, dan mutasi antar outlet.'],
+            Role::SUPER_ADMIN => ['name' => 'Super Admin', 'description' => 'Role teknis untuk konfigurasi sistem dan hak akses.'],
+            Role::ADMIN => ['name' => 'Admin Cabang', 'description' => 'Penanggung jawab operasional satu outlet/cabang.'],
+            Role::STAFF_ADMIN => ['name' => 'Staff Admin', 'description' => 'Input data administratif operasional outlet.'],
+            Role::CASHIER => ['name' => 'Cashier', 'description' => 'Akses operasional kasir dan transaksi POS.'],
+            Role::STAFF_OUTLET => ['name' => 'Staff Outlet', 'description' => 'Fokus ke aktivitas inventory fisik dan penerimaan mutasi.'],
+            Role::WAREHOUSE_MANAGER => ['name' => 'Warehouse Manager', 'description' => 'Akses operasional gudang, transfer, dan procurement.'],
+            Role::FINANCE => ['name' => 'Finance', 'description' => 'Akses kontrol keuangan dan persetujuan finansial.'],
+        ];
 
-        $ownerRole->permissions()->sync(Permission::query()->pluck('id')->all());
-        $cashierRole->permissions()->sync(
-            Permission::query()
+        $roleModels = collect($roles)->mapWithKeys(function (array $meta, string $slug): array {
+            $role = Role::query()->updateOrCreate(
+                ['slug' => $slug],
+                [
+                    'name' => $meta['name'],
+                    'description' => $meta['description'],
+                    'is_system' => true,
+                ]
+            );
+
+            return [$slug => $role];
+        });
+
+        $permissionMap = [
+            Role::OWNER => Permission::query()->pluck('id')->all(),
+            Role::SUPER_ADMIN => Permission::query()->pluck('id')->all(),
+            Role::MANAGER => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'master-data.manage',
+                    'inventory.transfer.manage',
+                    'inventory.opname.manage',
+                    'procurement.purchase.manage',
+                    'procurement.return.manage',
+                    'sales.pos.manage',
+                    'sales.return.manage',
+                    'finance.report.export',
+                    'finance.reconciliation.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::HRD => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'hr.employee.manage',
+                    'hr.shift.manage',
+                    'hr.payroll.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::ADMIN => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'sales.pos.manage',
+                    'inventory.transfer.manage',
+                    'inventory.opname.manage',
+                    'procurement.purchase.manage',
+                    'procurement.return.manage',
+                    'sales.return.manage',
+                    'hr.shift.manage',
+                    'finance.reconciliation.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::STAFF_ADMIN => Permission::query()
+                ->whereIn('slug', [
+                    'dashboard.view',
+                    'inventory.transfer.manage',
+                    'procurement.purchase.manage',
+                    'hr.shift.manage',
+                ])
+                ->pluck('id')
+                ->all(),
+            Role::CASHIER => Permission::query()
                 ->whereIn('slug', ['dashboard.view', 'sales.pos.manage', 'sales.return.manage'])
                 ->pluck('id')
-                ->all()
-        );
-        $warehouseRole->permissions()->sync(
-            Permission::query()
+                ->all(),
+            Role::STAFF_OUTLET => Permission::query()
+                ->whereIn('slug', ['dashboard.view', 'inventory.transfer.manage'])
+                ->pluck('id')
+                ->all(),
+            Role::WAREHOUSE_MANAGER => Permission::query()
                 ->whereIn('slug', [
                     'dashboard.view',
                     'inventory.transfer.manage',
@@ -89,10 +131,8 @@ class RolePermissionSeeder extends Seeder
                     'procurement.return.manage',
                 ])
                 ->pluck('id')
-                ->all()
-        );
-        $financeRole->permissions()->sync(
-            Permission::query()
+                ->all(),
+            Role::FINANCE => Permission::query()
                 ->whereIn('slug', [
                     'dashboard.view',
                     'finance.payroll.approve',
@@ -102,57 +142,14 @@ class RolePermissionSeeder extends Seeder
                     'audit.log.view',
                 ])
                 ->pluck('id')
-                ->all()
-        );
+                ->all(),
+        ];
 
-        $tenantId = Tenant::query()->where('code', 'default')->value('id');
-        $defaultLocationId = Location::query()->orderBy('id')->value('id');
-
-        $owner = User::query()->updateOrCreate(
-            ['email' => 'owner@webstellar.local'],
-            [
-                'name' => 'Owner ERP',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
-        );
-        $cashier = User::query()->updateOrCreate(
-            ['email' => 'cashier@webstellar.local'],
-            [
-                'name' => 'Kasir Outlet',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
-        );
-        $warehouseManager = User::query()->updateOrCreate(
-            ['email' => 'warehouse@webstellar.local'],
-            [
-                'name' => 'Manager Gudang',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
-        );
-        $financeUser = User::query()->updateOrCreate(
-            ['email' => 'finance@webstellar.local'],
-            [
-                'name' => 'Finance ERP',
-                'password' => 'password',
-                'tenant_id' => $tenantId,
-                'location_id' => $defaultLocationId,
-            ]
-        );
-
-        $owner->roles()->syncWithoutDetaching([$ownerRole->id]);
-        $cashier->roles()->syncWithoutDetaching([$cashierRole->id]);
-        $warehouseManager->roles()->syncWithoutDetaching([$warehouseRole->id]);
-        $financeUser->roles()->syncWithoutDetaching([$financeRole->id]);
-
-        User::query()
-            ->where('email', 'test@example.com')
-            ->get()
-            ->each(fn (User $user) => $user->roles()->syncWithoutDetaching([$ownerRole->id]));
+        foreach ($permissionMap as $roleSlug => $permissionIds) {
+            $role = $roleModels->get($roleSlug);
+            if ($role instanceof Role) {
+                $role->permissions()->sync($permissionIds);
+            }
+        }
     }
 }
